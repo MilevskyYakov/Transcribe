@@ -1,0 +1,53 @@
+app:
+  temp_dir: "./tmp"
+  output_dir: "./output"
+  keep_temp: true
+  save_artifacts: true
+
+runtime:
+  device: "mps"
+  max_parallel_jobs: 1
+
+media:
+  sample_rate: 16000
+  mono: true
+  normalize_audio: true
+
+asr:
+  backend: "whisper"
+  model_name: "large-v3"
+  language: "ru"
+  allow_mixed_vocabulary: true
+
+alignment:
+  enabled: true
+  word_timestamps: true
+
+diarization:
+  enabled: true
+  num_speakers: "auto"
+  allow_expected_speaker_mapping: true
+
+postprocess:
+  mode: "almost_verbatim"
+  remove_fillers: false
+  aggressive_cleanup: false
+  merge_adjacent_same_speaker: true
+
+summary:
+  enabled: true
+  mode: "extractive_or_local_llm"
+
+export:
+  txt: true
+  md: true
+  docx: true
+  pdf: true
+  srt: true
+  json: true
+
+watch_folder:
+  enabled: false
+  stability_seconds: 10
+  move_processed: true
+  move_failed: true

@@ -1,0 +1,13 @@
+.venv
+frontend/node_modules
+frontend/dist
+output
+output_*
+tmp
+__pycache__
+*.pyc
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.playwright-mcp
+.git

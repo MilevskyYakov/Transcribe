@@ -1,0 +1,5 @@
+watch_folder:
+  enabled: true
+  stability_seconds: 10
+  move_processed: true
+  move_failed: true

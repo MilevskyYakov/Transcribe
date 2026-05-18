@@ -1,0 +1,26 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: speech-backend
+    ports:
+      - "8765:8765"
+    environment:
+      XDG_CACHE_HOME: /models-cache
+    volumes:
+      - ${HOME}/.cache:/models-cache
+      - ./output:/app/output
+      - ./tmp:/app/tmp
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: speech-frontend
+    depends_on:
+      - backend
+    ports:
+      - "5173:5173"
+    restart: unless-stopped

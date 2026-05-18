@@ -1,0 +1,16 @@
+runtime:
+  device: "mps"
+  max_parallel_jobs: 1
+
+asr:
+  model_name: "large-v3"
+
+alignment:
+  enabled: true
+  word_timestamps: true
+
+diarization:
+  enabled: true
+
+summary:
+  enabled: true

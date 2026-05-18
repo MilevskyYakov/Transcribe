@@ -1,0 +1,9 @@
+runtime:
+  device: "mps"
+  max_parallel_jobs: 1
+
+app:
+  temp_dir: "./tmp"
+  output_dir: "./output"
+  keep_temp: false
+  save_artifacts: true
