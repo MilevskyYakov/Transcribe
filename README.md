@@ -279,6 +279,33 @@ npm run package:mac
 бандлит найденные в PATH `ffmpeg` и `ffprobe`, затем запускает Tauri build под
 `aarch64-apple-darwin`.
 
+`package:mac` только создаёт bundle в репозитории. Уже установленное приложение
+в `/Applications/Transcribe Doc.app` после изменений в коде само не обновляется:
+для обычного локального обновления установленного `.app` используйте:
+
+```bash
+cd frontend
+npm run install:local
+```
+
+`install:local` сначала выполняет `package:mac`, затем безопасно заменяет
+`/Applications/Transcribe Doc.app`, снимает quarantine metadata best-effort и
+открывает приложение. Если уже запущен старый app, команда остановится с явным
+сообщением; чтобы автоматически закрыть его перед заменой:
+
+```bash
+npm run install:local -- --quit-running
+```
+
+Для повторной установки уже собранного bundle из корня репозитория:
+
+```bash
+./scripts/install-local-app.sh --no-build --no-open
+```
+
+Полезные флаги: `--no-open` для automation, `--install-dir DIR` для установки не
+в `/Applications`, `--help` для справки.
+
 В desktop-режиме приложение само запускает локальный backend на свободном
 `127.0.0.1` порту. Runtime data хранится в macOS Application Support:
 `output`, `tmp` и model cache не зависят от папки репозитория.
