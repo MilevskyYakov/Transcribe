@@ -82,6 +82,29 @@ def write_job_payload(job_json: Path, payload: JsonObject) -> None:
     job_json.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def write_failed_job_payload(
+    output_root: Path,
+    job_id: str,
+    *,
+    input_path: str,
+    message: str,
+    display_title: str | None = None,
+) -> None:
+    """Persist a failed job payload through the service persistence helper."""
+    job_dir = output_root / job_id
+    job_dir.mkdir(parents=True, exist_ok=True)
+    payload: JsonObject = {
+        "job_id": job_id,
+        "source_paths": [input_path],
+        "status": JobStatus.FAILED.value,
+        "detected_language": None,
+        "artifacts": {},
+        "metadata": {"display_title": display_title or Path(input_path).stem},
+        "warnings": [message],
+    }
+    write_job_payload(job_dir / "job.json", payload)
+
+
 def append_event_files(job_dir: Path, event: JsonObject) -> None:
     artifacts_dir = job_dir / "artifacts"
     artifacts_dir.mkdir(parents=True, exist_ok=True)
