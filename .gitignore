@@ -4,6 +4,9 @@
 .playwright-mcp/
 .venv/
 .DS_Store
+.env
+.env.*
+!.env.example
 __pycache__/
 *.pyc
 *.egg-info/
@@ -22,5 +25,3 @@ playwright-report/
 output/
 output_*/
 tmp/
-
--version
