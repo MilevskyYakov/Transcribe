@@ -6,13 +6,13 @@ import threading
 import traceback
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, TypeVar
+from typing import Any, Callable, TypeVar
 
 from transcribe_doc.alignment.factory import build_alignment_backend
 from transcribe_doc.app.config import AppConfig
 from transcribe_doc.app.models import Job, JobStatus, TranscriptSegment
 from transcribe_doc.asr.factory import build_asr_backend
-from transcribe_doc.asr.transcription_service import TranscriptionService
+from transcribe_doc.asr.transcription_service import TranscriptionResult, TranscriptionService
 from transcribe_doc.core.job_manager import append_job_event, create_job
 from transcribe_doc.diarization.factory import build_diarization_backend
 from transcribe_doc.diarization.quality import collect_diarization_quality_summary
@@ -43,6 +43,51 @@ class ProcessingResult:
     message: str
 
 
+@dataclass(frozen=True)
+class StageEvent:
+    """Canonical event metadata for visible processing stages."""
+
+    stage: str
+    message: str
+    progress: int
+
+
+STAGE_EVENTS = {
+    "queued": StageEvent("queued", "Задача создана и ожидает запуска", 0),
+    "processing": StageEvent("processing", "Обработка началась", 5),
+    "probe": StageEvent("probe", "Проверяю медиафайл", 10),
+    "normalize": StageEvent("normalize", "Нормализую аудио через ffmpeg", 20),
+    "speakers_hint": StageEvent("speakers", "Подсказка по участникам учтена", 28),
+    "speakers_manifest": StageEvent("speakers", "Список спикеров загружен", 28),
+    "asr_start": StageEvent("asr", "Запускаю распознавание речи", 35),
+    "transcript": StageEvent("transcript", "", 65),
+    "diarization": StageEvent("diarization", "Сохраняю диагностику спикеров", 72),
+    "speaker_mapping": StageEvent("speaker_mapping", "Сопоставляю имена спикеров", 76),
+    "artifacts": StageEvent("artifacts", "Сохраняю JSON-артефакты", 82),
+    "export": StageEvent("export", "Генерирую пользовательские форматы", 90),
+    "summary": StageEvent("summary", "Генерирую краткое summary", 95),
+    "done_ok": StageEvent("done", "Задача успешно завершена", 100),
+    "done_warning": StageEvent("done", "Задача завершена с предупреждениями", 100),
+}
+
+
+@dataclass
+class ProcessingContext:
+    """Mutable state shared by explicit single-file processing stages."""
+
+    resolved_input_path: Path
+    config: AppConfig
+    job: Job
+    job_paths: JobPaths
+    speaker_manifest_path: str | Path | None
+    speaker_hint: str | None
+    formats: str | None
+    asr_backend_factory: Callable[[AppConfig], Any]
+    diarization_backend_factory: Callable[[AppConfig, dict[str, Any] | None], Any]
+    speaker_manifest: dict[str, Any] | None = None
+    transcription_result: TranscriptionResult | None = None
+
+
 def process_single_file(
     input_path: str | Path,
     *,
@@ -69,195 +114,22 @@ def process_single_file(
         job_id=job_id,
         display_title=display_title,
     )
+    context = ProcessingContext(
+        resolved_input_path=resolved_input.path,
+        config=config,
+        job=job,
+        job_paths=job_paths,
+        speaker_manifest_path=speaker_manifest_path,
+        speaker_hint=speaker_hint,
+        formats=formats,
+        asr_backend_factory=asr_backend_factory,
+        diarization_backend_factory=diarization_backend_factory,
+    )
 
     try:
-        append_job_event(
-            job,
-            job_paths,
-            stage="queued",
-            status="ok",
-            message="Задача создана и ожидает запуска",
-            progress=0,
-        )
-        job.status = JobStatus.PROCESSING
-        append_job_event(
-            job,
-            job_paths,
-            stage="processing",
-            status="ok",
-            message="Обработка началась",
-            progress=5,
-        )
+        for stage in SINGLE_FILE_PIPELINE:
+            stage(context)
 
-        append_job_event(
-            job,
-            job_paths,
-            stage="probe",
-            status="ok",
-            message="Проверяю медиафайл",
-            progress=10,
-        )
-        probe_media(resolved_input.path)
-        append_job_event(
-            job,
-            job_paths,
-            stage="normalize",
-            status="ok",
-            message="Нормализую аудио через ffmpeg",
-            progress=20,
-        )
-        normalize_media(
-            resolved_input.path,
-            job_paths.normalized_audio,
-            sample_rate=config.media.sample_rate,
-            mono=config.media.mono,
-        )
-
-        speaker_manifest = load_speaker_manifest(
-            str(speaker_manifest_path) if speaker_manifest_path is not None else None
-        ) or speaker_hint_to_manifest(speaker_hint)
-        if speaker_manifest:
-            job.metadata["speaker_manifest"] = speaker_manifest
-            message = (
-                "Подсказка по участникам учтена"
-                if speaker_manifest.get("source") == "freeform_speaker_hint"
-                else "Список спикеров загружен"
-            )
-            append_job_event(
-                job,
-                job_paths,
-                stage="speakers",
-                status="ok",
-                message=message,
-                progress=28,
-            )
-
-        append_job_event(
-            job,
-            job_paths,
-            stage="asr",
-            status="ok",
-            message="Запускаю распознавание речи",
-            progress=35,
-        )
-        asr_backend = asr_backend_factory(config)
-        alignment_backend = build_alignment_backend(config)
-        diarization_backend = diarization_backend_factory(config, speaker_manifest)
-        transcription_result = _run_with_heartbeat(
-            lambda: TranscriptionService(
-                asr_backend=asr_backend,
-                alignment_backend=alignment_backend,
-                diarization_backend=diarization_backend,
-            ).transcribe(str(job_paths.normalized_audio)),
-            job=job,
-            job_paths=job_paths,
-            stage="asr",
-            message="Распознавание всё ещё выполняется. Это может быть загрузка модели или обработка длинного файла",
-            start_progress=40,
-            max_progress=60,
-        )
-        append_job_event(
-            job,
-            job_paths,
-            stage="transcript",
-            status="ok",
-            message=f"Распознавание завершено: сегментов {len(transcription_result.segments)}",
-            progress=65,
-        )
-
-        diarization_quality_summary = collect_diarization_quality_summary(
-            transcription_result.segments
-        )
-        if diarization_quality_summary is not None:
-            job.metadata["diarization_quality"] = diarization_quality_summary
-        if _has_diarization_annotations(transcription_result.segments):
-            append_job_event(
-                job,
-                job_paths,
-                stage="diarization",
-                status="ok",
-                message="Сохраняю диагностику спикеров",
-                progress=72,
-            )
-            save_segments(transcription_result.segments, job_paths.diarization_dump)
-        if speaker_manifest and config.diarization.allow_expected_speaker_mapping:
-            append_job_event(
-                job,
-                job_paths,
-                stage="speaker_mapping",
-                status="ok",
-                message="Сопоставляю имена спикеров",
-                progress=76,
-            )
-            transcription_result = transcription_result.__class__(
-                segments=apply_expected_speaker_mapping(
-                    transcription_result.segments,
-                    speaker_manifest,
-                ),
-                warnings=transcription_result.warnings,
-                detected_language=transcription_result.detected_language,
-            )
-
-        append_job_event(
-            job,
-            job_paths,
-            stage="artifacts",
-            status="ok",
-            message="Сохраняю JSON-артефакты",
-            progress=82,
-        )
-        save_transcription_result(transcription_result, job_paths.transcript_raw_json)
-        save_segments(transcription_result.segments, job_paths.segments_json)
-        save_words(transcription_result.segments, job_paths.words_json)
-        append_job_event(
-            job,
-            job_paths,
-            stage="export",
-            status="ok",
-            message="Генерирую пользовательские форматы",
-            progress=90,
-        )
-        export_all(
-            transcription_result.segments,
-            _selected_export_paths(config, job_paths, formats),
-        )
-        if config.summary.enabled:
-            append_job_event(
-                job,
-                job_paths,
-                stage="summary",
-                status="ok",
-                message="Генерирую краткое summary",
-                progress=95,
-            )
-            write_summary(
-                transcription_result.segments,
-                job_paths.summary_md,
-                job_paths.summary_json,
-            )
-        job.detected_language = transcription_result.detected_language
-
-        if transcription_result.warnings:
-            job.status = JobStatus.COMPLETED_WITH_WARNINGS
-            job.warnings.extend(transcription_result.warnings)
-            append_job_event(
-                job,
-                job_paths,
-                stage="done",
-                status="warning",
-                message="Задача завершена с предупреждениями",
-                progress=100,
-            )
-        else:
-            job.status = JobStatus.COMPLETED
-            append_job_event(
-                job,
-                job_paths,
-                stage="done",
-                status="ok",
-                message="Задача успешно завершена",
-                progress=100,
-            )
         return ProcessingResult(
             0,
             job,
@@ -281,6 +153,171 @@ def process_single_file(
             with job_paths.log_file.open("a", encoding="utf-8") as handle:
                 handle.write(f"Failure detail:\n{failure_detail}\n")
         return ProcessingResult(1, job, job_paths, failure_message)
+
+
+def start_job_stage(context: ProcessingContext) -> None:
+    _emit(context, "queued")
+    context.job.status = JobStatus.PROCESSING
+    _emit(context, "processing")
+
+
+def probe_media_stage(context: ProcessingContext) -> None:
+    _emit(context, "probe")
+    probe_media(context.resolved_input_path)
+
+
+def normalize_audio_stage(context: ProcessingContext) -> None:
+    _emit(context, "normalize")
+    normalize_media(
+        context.resolved_input_path,
+        context.job_paths.normalized_audio,
+        sample_rate=context.config.media.sample_rate,
+        mono=context.config.media.mono,
+    )
+
+
+def resolve_speakers_stage(context: ProcessingContext) -> None:
+    context.speaker_manifest = load_speaker_manifest(
+        str(context.speaker_manifest_path) if context.speaker_manifest_path is not None else None
+    ) or speaker_hint_to_manifest(context.speaker_hint)
+    if not context.speaker_manifest:
+        return
+
+    context.job.metadata["speaker_manifest"] = context.speaker_manifest
+    event_key = (
+        "speakers_hint"
+        if context.speaker_manifest.get("source") == "freeform_speaker_hint"
+        else "speakers_manifest"
+    )
+    _emit(context, event_key)
+
+
+def transcribe_stage(context: ProcessingContext) -> None:
+    _emit(context, "asr_start")
+    asr_backend = context.asr_backend_factory(context.config)
+    alignment_backend = build_alignment_backend(context.config)
+    diarization_backend = context.diarization_backend_factory(
+        context.config,
+        context.speaker_manifest,
+    )
+    context.transcription_result = _run_with_heartbeat(
+        lambda: TranscriptionService(
+            asr_backend=asr_backend,
+            alignment_backend=alignment_backend,
+            diarization_backend=diarization_backend,
+        ).transcribe(str(context.job_paths.normalized_audio)),
+        job=context.job,
+        job_paths=context.job_paths,
+        stage="asr",
+        message="Распознавание всё ещё выполняется. Это может быть загрузка модели или обработка длинного файла",
+        start_progress=40,
+        max_progress=60,
+    )
+    _emit(
+        context,
+        "transcript",
+        message=f"Распознавание завершено: сегментов {len(context.transcription_result.segments)}",
+    )
+
+
+def diagnose_diarization_stage(context: ProcessingContext) -> None:
+    transcription_result = _require_transcription_result(context)
+    diarization_quality_summary = collect_diarization_quality_summary(transcription_result.segments)
+    if diarization_quality_summary is not None:
+        context.job.metadata["diarization_quality"] = diarization_quality_summary
+    if _has_diarization_annotations(transcription_result.segments):
+        _emit(context, "diarization")
+        save_segments(transcription_result.segments, context.job_paths.diarization_dump)
+    if context.speaker_manifest and context.config.diarization.allow_expected_speaker_mapping:
+        _emit(context, "speaker_mapping")
+        context.transcription_result = transcription_result.__class__(
+            segments=apply_expected_speaker_mapping(
+                transcription_result.segments,
+                context.speaker_manifest,
+            ),
+            warnings=transcription_result.warnings,
+            detected_language=transcription_result.detected_language,
+        )
+
+
+def persist_artifacts_stage(context: ProcessingContext) -> None:
+    transcription_result = _require_transcription_result(context)
+    _emit(context, "artifacts")
+    save_transcription_result(transcription_result, context.job_paths.transcript_raw_json)
+    save_segments(transcription_result.segments, context.job_paths.segments_json)
+    save_words(transcription_result.segments, context.job_paths.words_json)
+
+
+def export_stage(context: ProcessingContext) -> None:
+    transcription_result = _require_transcription_result(context)
+    _emit(context, "export")
+    export_all(
+        transcription_result.segments,
+        _selected_export_paths(context.config, context.job_paths, context.formats),
+    )
+
+
+def summary_stage(context: ProcessingContext) -> None:
+    transcription_result = _require_transcription_result(context)
+    if not context.config.summary.enabled:
+        return
+    _emit(context, "summary")
+    write_summary(
+        transcription_result.segments,
+        context.job_paths.summary_md,
+        context.job_paths.summary_json,
+    )
+
+
+def complete_job_stage(context: ProcessingContext) -> None:
+    transcription_result = _require_transcription_result(context)
+    context.job.detected_language = transcription_result.detected_language
+    if transcription_result.warnings:
+        context.job.status = JobStatus.COMPLETED_WITH_WARNINGS
+        context.job.warnings.extend(transcription_result.warnings)
+        _emit(context, "done_warning", status="warning")
+        return
+
+    context.job.status = JobStatus.COMPLETED
+    _emit(context, "done_ok")
+
+
+SINGLE_FILE_PIPELINE: tuple[Callable[[ProcessingContext], None], ...] = (
+    start_job_stage,
+    probe_media_stage,
+    normalize_audio_stage,
+    resolve_speakers_stage,
+    transcribe_stage,
+    diagnose_diarization_stage,
+    persist_artifacts_stage,
+    export_stage,
+    summary_stage,
+    complete_job_stage,
+)
+
+
+def _emit(
+    context: ProcessingContext,
+    event_key: str,
+    *,
+    status: str = "ok",
+    message: str | None = None,
+) -> None:
+    event = STAGE_EVENTS[event_key]
+    append_job_event(
+        context.job,
+        context.job_paths,
+        stage=event.stage,
+        status=status,
+        message=message if message is not None else event.message,
+        progress=event.progress,
+    )
+
+
+def _require_transcription_result(context: ProcessingContext) -> TranscriptionResult:
+    if context.transcription_result is None:
+        raise RuntimeError("Transcription stage did not produce a result")
+    return context.transcription_result
 
 
 def _has_diarization_annotations(segments: list[TranscriptSegment]) -> bool:
