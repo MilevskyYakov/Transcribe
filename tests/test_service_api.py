@@ -11,6 +11,7 @@ from transcribe_doc.core.batch import BatchItemResult, BatchResult
 from transcribe_doc.core.processing import ProcessingResult
 from transcribe_doc.ingest.manifest_loader import speaker_hint_to_manifest
 from transcribe_doc.service import job_endpoints, model_endpoints
+from transcribe_doc.service.responses import job_to_response
 from transcribe_doc.service.request_parsing import payload_from_multipart_form
 from transcribe_doc.service import server as service_server
 from transcribe_doc.service.server import build_server, list_artifacts, list_events, list_jobs
@@ -101,6 +102,85 @@ def test_http_models_endpoint_returns_cache_status(tmp_path: Path, monkeypatch) 
 
     assert models["current_model"] == "large-v3"
     assert models["models"] == [{"name": "tiny", "status": "ready"}]
+
+
+def test_job_response_uses_typed_metadata_contract() -> None:
+    job = Job(
+        job_id="job-contract",
+        source_paths=["sample.wav"],
+        status=JobStatus.COMPLETED_WITH_WARNINGS,
+        metadata={
+            "display_title": "Contract sample",
+            "progress": 100,
+            "diarization_quality": {
+                "detected_cluster_count_max": 1,
+                "min_centroid_similarity_margin": 0.04,
+                "dominant_cluster_share": 0.9,
+            },
+        },
+        warnings=["Diarization quality warning: low margin"],
+    )
+
+    response = job_to_response(job)
+
+    assert response["job_id"] == "job-contract"
+    assert response["status"] == "completed_with_warnings"
+    assert response["metadata"]["display_title"] == "Contract sample"
+    assert response["metadata"]["progress"] == 100
+    assert response["metadata"]["diarization_quality"] == {
+        "detected_cluster_count_max": 1,
+        "min_centroid_similarity_margin": 0.04,
+        "dominant_cluster_share": 0.9,
+    }
+
+
+def test_transcript_artifacts_events_endpoints_use_contract_payloads(tmp_path: Path) -> None:
+    output_root = tmp_path / "output"
+    job_dir = output_root / "job-local"
+    artifacts_dir = job_dir / "artifacts"
+    artifacts_dir.mkdir(parents=True)
+    segments_path = job_dir / "segments.json"
+    words_path = job_dir / "words.json"
+    segments_path.write_text(
+        '[{"segment_id":"s1","start_seconds":0,"end_seconds":1,"text_raw":"Hi","text_clean":"Hi"}]',
+        encoding="utf-8",
+    )
+    words_path.write_text('[{"text":"Hi","start_seconds":0,"end_seconds":1}]', encoding="utf-8")
+    (artifacts_dir / "events.jsonl").write_text(
+        '{"timestamp":"2026-05-08T00:00:00Z","stage":"done","status":"ok","message":"ready","progress":100}\n',
+        encoding="utf-8",
+    )
+    save_job(
+        Job(
+            job_id="job-local",
+            source_paths=["sample.wav"],
+            status=JobStatus.COMPLETED,
+            artifacts=ArtifactManifest(segments_json=str(segments_path)),
+        ),
+        job_dir / "job.json",
+    )
+    ctx = SimpleNamespace(output_root=output_root)
+
+    transcript = job_endpoints.transcript_endpoint(ctx, "job-local").payload
+    artifacts = job_endpoints.artifacts_endpoint(ctx, "job-local").payload
+    events = job_endpoints.events_endpoint(ctx, "job-local").payload
+
+    assert transcript["job"]["job_id"] == "job-local"
+    assert transcript["segments"][0]["segment_id"] == "s1"
+    assert transcript["words"][0]["text"] == "Hi"
+    assert artifacts["artifacts"][0] == {
+        "name": "segments_json",
+        "filename": "segments.json",
+        "size_bytes": segments_path.stat().st_size,
+        "download_url": "/jobs/job-local/artifacts/segments_json",
+    }
+    assert events["events"][0] == {
+        "timestamp": "2026-05-08T00:00:00Z",
+        "stage": "done",
+        "status": "ok",
+        "message": "ready",
+        "progress": 100,
+    }
 
 
 def test_post_jobs_uses_shared_processing_entrypoint(tmp_path: Path, monkeypatch) -> None:
@@ -250,7 +330,9 @@ def test_models_response_marks_interrupted_download_as_recoverable() -> None:
 def test_models_response_keeps_active_download_in_progress() -> None:
     model = {"name": "parakeet-v3", "status": "downloading", "progress": 0}
 
-    response = service_server._model_download_state_for_response(model, active_downloads={"parakeet-v3"})
+    response = service_server._model_download_state_for_response(
+        model, active_downloads={"parakeet-v3"}
+    )
 
     assert response == model
 

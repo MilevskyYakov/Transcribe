@@ -7,6 +7,7 @@ from typing import Any
 
 from transcribe_doc.app.config import AppConfig
 
+from .contracts import job_response
 from .types import JsonObject
 
 
@@ -17,7 +18,9 @@ def config_for_payload(config: AppConfig, payload: JsonObject) -> AppConfig:
         return config
     next_asr = replace(
         config.asr,
-        backend=backend.strip() if isinstance(backend, str) and backend.strip() else config.asr.backend,
+        backend=backend.strip()
+        if isinstance(backend, str) and backend.strip()
+        else config.asr.backend,
         model_name=model_name.strip()
         if isinstance(model_name, str) and model_name.strip()
         else config.asr.model_name,
@@ -31,17 +34,7 @@ def display_title_from_payload(payload: JsonObject) -> str | None:
 
 
 def job_to_response(job: Any) -> JsonObject:
-    if isinstance(job, dict):
-        return dict(job)
-    return {
-        "job_id": job.job_id,
-        "source_paths": job.source_paths,
-        "status": job.status.value,
-        "detected_language": job.detected_language,
-        "artifacts": asdict(job.artifacts),
-        "metadata": job.metadata,
-        "warnings": job.warnings,
-    }
+    return job_response(job).to_payload()
 
 
 def batch_to_response(result: Any) -> JsonObject:

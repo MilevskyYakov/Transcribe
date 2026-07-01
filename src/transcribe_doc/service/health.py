@@ -8,27 +8,37 @@ from pathlib import Path
 
 from transcribe_doc.app.config import AppConfig
 
+from .contracts import (
+    AppPathsResponse,
+    HealthResponse,
+    MediaToolsResponse,
+    MediaToolStatusResponse,
+    dataclass_payload,
+)
 from .types import JsonObject
 
 
 def health_payload(config: AppConfig) -> JsonObject:
-    return {
-        "status": "ok",
-        "app": {
-            "output_dir": config.app.output_dir,
-            "temp_dir": config.app.temp_dir,
-            "cache_dir": os.getenv("XDG_CACHE_HOME", str(Path.home() / ".cache")),
-        },
-        "media_tools": {
-            "ffmpeg": tool_status("ffmpeg"),
-            "ffprobe": tool_status("ffprobe"),
-        },
-    }
+    return dataclass_payload(
+        HealthResponse(
+            status="ok",
+            app=AppPathsResponse(
+                output_dir=config.app.output_dir,
+                temp_dir=config.app.temp_dir,
+                cache_dir=os.getenv("XDG_CACHE_HOME", str(Path.home() / ".cache")),
+            ),
+            media_tools=MediaToolsResponse(
+                ffmpeg=tool_status_response("ffmpeg"),
+                ffprobe=tool_status_response("ffprobe"),
+            ),
+        )
+    )
 
 
 def tool_status(name: str) -> JsonObject:
+    return dataclass_payload(tool_status_response(name))
+
+
+def tool_status_response(name: str) -> MediaToolStatusResponse:
     path = shutil.which(name)
-    return {
-        "available": path is not None,
-        "path": path,
-    }
+    return MediaToolStatusResponse(available=path is not None, path=path)
