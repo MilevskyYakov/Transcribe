@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
-from transcribe_doc.asr.model_cache import download_whisper_model, inspect_whisper_models
+from transcribe_doc.asr.whisper_cache import download_whisper_model, inspect_whisper_models
 
 
 class ModelRuntimeServer(Protocol):

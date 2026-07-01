@@ -15,7 +15,8 @@ from urllib.parse import unquote, urlparse
 
 from transcribe_doc.app.config import AppConfig
 from transcribe_doc.app.models import JobStatus
-from transcribe_doc.asr.model_cache import inspect_whisper_models, mark_model_download_queued
+from transcribe_doc.asr.external_model_cache import mark_model_download_queued
+from transcribe_doc.asr.whisper_cache import inspect_whisper_models
 from transcribe_doc.core.batch import process_batch, scan_watch_folder
 from transcribe_doc.core.job_manager import create_job, persist_job
 from transcribe_doc.core.processing import process_single_file

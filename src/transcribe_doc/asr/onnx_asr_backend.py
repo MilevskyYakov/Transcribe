@@ -12,7 +12,7 @@ import wave
 from transcribe_doc.app.exceptions import ExternalDependencyError
 from transcribe_doc.app.models import TranscriptSegment
 from transcribe_doc.asr.base import AsrBackend, AsrTranscription
-from transcribe_doc.asr.model_cache import (
+from transcribe_doc.asr.external_model_cache import (
     ensure_external_model_ready,
     external_model_runtime_path,
     external_runtime_name,

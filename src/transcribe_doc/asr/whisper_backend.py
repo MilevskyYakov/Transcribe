@@ -8,7 +8,7 @@ from typing import Any, Callable, Optional
 from transcribe_doc.app.exceptions import ExternalDependencyError
 from transcribe_doc.app.models import TranscriptSegment, WordToken
 from transcribe_doc.asr.base import AsrBackend, AsrTranscription
-from transcribe_doc.asr.model_cache import ensure_whisper_model_ready
+from transcribe_doc.asr.whisper_cache import ensure_whisper_model_ready
 
 
 class WhisperBackend(AsrBackend):
