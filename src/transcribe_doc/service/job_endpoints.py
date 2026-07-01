@@ -136,6 +136,7 @@ def create_batch_endpoint(ctx: Any) -> ApiResponse:
             speaker_manifest_path=payload.get("speaker_manifest_path"),
             speaker_hint=payload.get("speaker_hint"),
             formats=payload.get("formats"),
+            executor=ctx.executor,
         )
     except ValueError as error:
         return json_response({"error": str(error)}, HTTPStatus.BAD_REQUEST)
@@ -157,6 +158,7 @@ def scan_watch_folder_endpoint(ctx: Any) -> ApiResponse:
             speaker_manifest_path=payload.get("speaker_manifest_path"),
             speaker_hint=payload.get("speaker_hint"),
             formats=payload.get("formats"),
+            executor=ctx.executor,
         )
     except ValueError as error:
         return json_response({"error": str(error)}, HTTPStatus.BAD_REQUEST)

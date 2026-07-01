@@ -6,8 +6,10 @@ import json
 import shutil
 import time
 from collections.abc import Sequence
+from concurrent.futures import Executor, ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Callable
 
 from transcribe_doc.app.config import AppConfig
 from transcribe_doc.app.constants import SUPPORTED_AUDIO_EXTENSIONS, SUPPORTED_VIDEO_EXTENSIONS
@@ -44,19 +46,49 @@ def process_batch(
     speaker_manifest_path: str | Path | None = None,
     speaker_hint: str | None = None,
     formats: str | None = None,
+    executor: Executor | None = None,
+    on_item_result: Callable[[BatchItemResult], None] | None = None,
 ) -> BatchResult:
-    """Process multiple files without stopping on individual failures."""
-    results: list[BatchItemResult] = []
-    for input_path in input_paths:
-        result = process_single_file(
-            input_path,
-            output_root=output_root,
-            config=config,
-            speaker_manifest_path=speaker_manifest_path,
-            speaker_hint=speaker_hint,
-            formats=formats,
-        )
-        results.append(_item_from_processing_result(input_path, result))
+    """Process multiple files through the canonical single-file job runner."""
+    local_executor: ThreadPoolExecutor | None = None
+    if executor is None:
+        local_executor = ThreadPoolExecutor(max_workers=max(1, config.runtime.max_parallel_jobs))
+        executor = local_executor
+
+    try:
+        futures = {
+            executor.submit(
+                process_single_file,
+                input_path,
+                output_root=output_root,
+                config=config,
+                speaker_manifest_path=speaker_manifest_path,
+                speaker_hint=speaker_hint,
+                formats=formats,
+            ): (index, input_path)
+            for index, input_path in enumerate(input_paths)
+        }
+        ordered_results: list[BatchItemResult | None] = [None] * len(futures)
+        for future in as_completed(futures):
+            index, input_path = futures[future]
+            try:
+                processing_result = future.result()
+                item_result = _item_from_processing_result(input_path, processing_result)
+            except Exception as error:
+                item_result = BatchItemResult(
+                    input_path=str(Path(input_path).expanduser().resolve()),
+                    exit_code=1,
+                    job_id=None,
+                    status="failed",
+                    message=str(error),
+                )
+            ordered_results[index] = item_result
+            if on_item_result is not None:
+                on_item_result(item_result)
+        results = [item for item in ordered_results if item is not None]
+    finally:
+        if local_executor is not None:
+            local_executor.shutdown(wait=True)
     return _write_batch_report(Path(output_root), results)
 
 
@@ -69,6 +101,7 @@ def process_directory(
     speaker_manifest_path: str | Path | None = None,
     speaker_hint: str | None = None,
     formats: str | None = None,
+    executor: Executor | None = None,
 ) -> BatchResult:
     """Process all supported media files from a directory."""
     files = discover_media_files(input_dir, recursive=recursive)
@@ -79,6 +112,7 @@ def process_directory(
         speaker_manifest_path=speaker_manifest_path,
         speaker_hint=speaker_hint,
         formats=formats,
+        executor=executor,
     )
 
 
@@ -92,6 +126,7 @@ def scan_watch_folder(
     speaker_manifest_path: str | Path | None = None,
     speaker_hint: str | None = None,
     formats: str | None = None,
+    executor: Executor | None = None,
 ) -> BatchResult:
     """Process currently stable files and move them to processed/failed folders."""
     root = Path(input_dir).expanduser().resolve()
@@ -100,21 +135,24 @@ def scan_watch_folder(
         for path in discover_media_files(root, recursive=recursive)
         if _is_stable(path, stability_seconds or config.watch_folder.stability_seconds)
     ]
-    result = process_batch(
+
+    def move_terminal_item(item: BatchItemResult) -> None:
+        source = Path(item.input_path)
+        if item.exit_code == 0 and config.watch_folder.move_processed:
+            _move_to_bucket(source, root / "processed")
+        elif item.exit_code != 0 and config.watch_folder.move_failed:
+            _move_to_bucket(source, root / "failed")
+
+    return process_batch(
         stable_files,
         output_root=output_root,
         config=config,
         speaker_manifest_path=speaker_manifest_path,
         speaker_hint=speaker_hint,
         formats=formats,
+        executor=executor,
+        on_item_result=move_terminal_item,
     )
-    for item in result.items:
-        source = Path(item.input_path)
-        if item.exit_code == 0 and config.watch_folder.move_processed:
-            _move_to_bucket(source, root / "processed")
-        elif item.exit_code != 0 and config.watch_folder.move_failed:
-            _move_to_bucket(source, root / "failed")
-    return result
 
 
 def discover_media_files(input_dir: str | Path, *, recursive: bool = False) -> list[Path]:
