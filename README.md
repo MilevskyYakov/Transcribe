@@ -215,10 +215,14 @@ output/<job_id>/
 ### Backend
 
 ```bash
-python3.11 -m venv .venv
-.venv/bin/python -m pip install -e ".[dev]"
+uv venv --python python3.11 .venv
+uv pip install -e ".[dev]"
 .venv/bin/python -m transcribe_doc.cli.main --help
 ```
+
+`uv pip` здесь намеренно используется вместо `.venv/bin/python -m pip`: `uv venv`
+может создать окружение без установленного `pip`, но `uv pip install ...` всё равно
+ставит зависимости в проектный `.venv`.
 
 Для обычной работы можно активировать окружение один раз:
 
