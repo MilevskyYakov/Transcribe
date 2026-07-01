@@ -201,6 +201,11 @@ output/<job_id>/
 - macOS Apple Silicon
 - Python 3.11+
 
+На macOS не используйте системный `/usr/bin/python3` для команд проекта: он
+может быть Python 3.9 и не соответствует `pyproject.toml`. В репозитории есть
+`.python-version` со значением `3.11`; используйте Homebrew/uv/pyenv Python 3.11
+и проектный virtualenv.
+
 Нужно предусмотреть:
 - установку `ffmpeg`;
 - установку Python-зависимостей;
@@ -213,6 +218,14 @@ output/<job_id>/
 python3.11 -m venv .venv
 .venv/bin/python -m pip install -e ".[dev]"
 .venv/bin/python -m transcribe_doc.cli.main --help
+```
+
+Для обычной работы можно активировать окружение один раз:
+
+```bash
+source .venv/bin/activate
+python --version  # должно быть 3.11+
+pytest
 ```
 
 ### Browser dashboard для разработки
@@ -290,6 +303,14 @@ cd frontend && npm test
 cd frontend && npm run build
 cd frontend && npm run e2e
 cd frontend && npm run tauri:build
+```
+
+Если `.venv` активирован, первые три команды можно запускать короче:
+
+```bash
+pytest -q
+ruff check src tests
+mypy src
 ```
 
 ## Ограничения
