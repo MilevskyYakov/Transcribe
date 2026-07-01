@@ -7,16 +7,26 @@ from typing import Any
 
 from transcribe_doc.asr.external_model_cache import mark_model_download_queued
 from transcribe_doc.asr.whisper_cache import inspect_whisper_models
+from transcribe_doc.service.contracts import (
+    ModelsResponse,
+    dataclass_payload,
+    model_status_response,
+)
 from transcribe_doc.service.http_response import ApiResponse, json_response
-from transcribe_doc.service.model_runtime import model_download_state_for_response, run_model_download
+from transcribe_doc.service.model_runtime import (
+    model_download_state_for_response,
+    run_model_download,
+)
 
 
 def models_endpoint(ctx: Any) -> ApiResponse:
     return json_response(
-        {
-            "current_model": ctx.app_config.asr.model_name,
-            "models": models_for_response(ctx.server),
-        }
+        dataclass_payload(
+            ModelsResponse(
+                current_model=ctx.app_config.asr.model_name,
+                models=[model_status_response(model) for model in models_for_response(ctx.server)],
+            )
+        )
     )
 
 
@@ -84,4 +94,7 @@ def download_all_models_endpoint(ctx: Any) -> ApiResponse:
 def models_for_response(server: Any) -> list[dict[str, Any]]:
     with server.model_lock:
         active_downloads = set(server.model_downloads)
-    return [model_download_state_for_response(model, active_downloads) for model in inspect_whisper_models()]
+    return [
+        model_download_state_for_response(model, active_downloads)
+        for model in inspect_whisper_models()
+    ]

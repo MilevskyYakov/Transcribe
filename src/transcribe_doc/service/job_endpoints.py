@@ -12,6 +12,12 @@ from transcribe_doc.core.job_manager import create_job, persist_job
 from transcribe_doc.core.processing import process_single_file
 from transcribe_doc.ingest.input_resolver import InputResolutionError, resolve_single_input
 from transcribe_doc.storage.paths import build_job_paths
+from transcribe_doc.service.contracts import (
+    ArtifactsResponse,
+    EventsResponse,
+    TranscriptResponse,
+    dataclass_payload,
+)
 from transcribe_doc.service.http_response import ApiResponse, file_response, json_response
 from transcribe_doc.service.job_store import (
     artifact_by_name,
@@ -22,7 +28,12 @@ from transcribe_doc.service.job_store import (
     read_json_file,
     write_failed_job_payload,
 )
-from transcribe_doc.service.responses import batch_to_response, config_for_payload, display_title_from_payload, job_to_response
+from transcribe_doc.service.responses import (
+    batch_to_response,
+    config_for_payload,
+    display_title_from_payload,
+    job_to_response,
+)
 from transcribe_doc.service.types import JsonObject
 
 
@@ -41,21 +52,29 @@ def transcript_endpoint(ctx: Any, job_id: str) -> ApiResponse:
     job_dir = ctx.output_root / job_id
     if not job_dir.exists():
         return json_response({"error": "job_not_found"}, HTTPStatus.NOT_FOUND)
+    segments = read_json_file(job_dir / "segments.json", [])
+    words = read_json_file(job_dir / "words.json", [])
     return json_response(
-        {
-            "job": load_job(ctx.output_root, job_id),
-            "segments": read_json_file(job_dir / "segments.json", []),
-            "words": read_json_file(job_dir / "words.json", []),
-        }
+        dataclass_payload(
+            TranscriptResponse(
+                job=load_job(ctx.output_root, job_id),
+                segments=segments if isinstance(segments, list) else [],
+                words=words if isinstance(words, list) else [],
+            )
+        )
     )
 
 
 def artifacts_endpoint(ctx: Any, job_id: str) -> ApiResponse:
-    return json_response({"artifacts": list_artifacts(ctx.output_root, job_id)})
+    return json_response(
+        dataclass_payload(ArtifactsResponse(artifacts=list_artifacts(ctx.output_root, job_id)))
+    )
 
 
 def events_endpoint(ctx: Any, job_id: str) -> ApiResponse:
-    return json_response({"events": list_events(ctx.output_root, job_id)})
+    return json_response(
+        dataclass_payload(EventsResponse(events=list_events(ctx.output_root, job_id)))
+    )
 
 
 def artifact_download_endpoint(ctx: Any, job_id: str, artifact_name: str) -> ApiResponse:

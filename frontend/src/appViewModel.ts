@@ -237,31 +237,22 @@ export function speakerTurns(segments: TranscriptSegment[]): SpeakerTurn[] {
   return turns;
 }
 
-function recordValue(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  return value as Record<string, unknown>;
-}
-
-function numericValue(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
 export function diarizationDiagnostic(job: Job | null): string | null {
-  const quality = recordValue(job?.metadata?.diarization_quality);
+  const quality = job?.metadata?.diarization_quality;
   if (!quality) return null;
 
-  const detectedClusterCount = numericValue(quality.detected_cluster_count_max);
-  if (detectedClusterCount !== null && detectedClusterCount < 2) {
+  const detectedClusterCount = quality.detected_cluster_count_max;
+  if (typeof detectedClusterCount === "number" && detectedClusterCount < 2) {
     return "Диаризация: система видит одного устойчивого спикера. Если ролей больше, проверьте подсказку участников.";
   }
 
-  const minMargin = numericValue(quality.min_centroid_similarity_margin);
-  if (minMargin !== null && minMargin < 0.1) {
+  const minMargin = quality.min_centroid_similarity_margin;
+  if (typeof minMargin === "number" && minMargin < 0.1) {
     return `Диаризация: роли различаются неуверенно (margin ${minMargin.toFixed(2)}), поэтому подписи спикеров стоит проверить.`;
   }
 
-  const dominantShare = numericValue(quality.dominant_cluster_share);
-  if (dominantShare !== null && dominantShare >= 0.8) {
+  const dominantShare = quality.dominant_cluster_share;
+  if (typeof dominantShare === "number" && dominantShare >= 0.8) {
     return `Диаризация: ${Math.round(dominantShare * 100)}% сегментов отнесено к одному спикеру. Это диагностический сигнал, не ошибка обработки.`;
   }
 

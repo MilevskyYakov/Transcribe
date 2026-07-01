@@ -25,13 +25,35 @@ export interface ArtifactManifest {
   config_snapshot?: string | null;
 }
 
+export interface DiarizationQuality {
+  detected_cluster_count_max?: number | null;
+  min_centroid_similarity_margin?: number | null;
+  dominant_cluster_share?: number | null;
+  unmapped_segment_count?: number | null;
+  speaker_switch_count?: number | null;
+  total_segment_count?: number | null;
+}
+
+export interface JobMetadata {
+  display_title?: string | null;
+  title?: string | null;
+  source_filename?: string | null;
+  execution?: string | null;
+  current_stage?: string | null;
+  last_message?: string | null;
+  progress?: number | null;
+  events?: JobEvent[];
+  diarization_quality?: DiarizationQuality | null;
+  [key: string]: unknown;
+}
+
 export interface Job {
   job_id: string;
   source_paths: string[];
   status: JobStatus;
   detected_language?: string | null;
   artifacts: ArtifactManifest;
-  metadata: Record<string, unknown>;
+  metadata: JobMetadata;
   warnings: string[];
 }
 
@@ -83,7 +105,7 @@ export interface ModelStatus {
   backend?: string;
   language?: string;
   description?: string;
-  status: "ready" | "missing" | "corrupt" | "downloading" | "error" | "unknown" | string;
+  status: "ready" | "missing" | "corrupt" | "queued" | "downloading" | "error" | "unknown" | string;
   path?: string;
   size_bytes?: number;
   downloaded_bytes?: number;

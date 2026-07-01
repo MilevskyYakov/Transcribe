@@ -9,6 +9,7 @@ from typing import Any
 
 from transcribe_doc.app.models import JobStatus
 
+from .contracts import ArtifactResponse, dataclass_payload, event_response
 from .responses import job_to_response
 from .types import JsonObject
 
@@ -131,12 +132,14 @@ def list_artifacts(output_root: Path, job_id: str) -> list[JsonObject]:
         path = Path(str(value))
         if path.exists() and path.is_file():
             existing.append(
-                {
-                    "name": label,
-                    "filename": path.name,
-                    "size_bytes": path.stat().st_size,
-                    "download_url": f"/jobs/{job_id}/artifacts/{label}",
-                }
+                dataclass_payload(
+                    ArtifactResponse(
+                        name=label,
+                        filename=path.name,
+                        size_bytes=path.stat().st_size,
+                        download_url=f"/jobs/{job_id}/artifacts/{label}",
+                    )
+                )
             )
     return existing
 
@@ -152,12 +155,16 @@ def list_events(output_root: Path, job_id: str) -> list[JsonObject]:
             except json.JSONDecodeError:
                 continue
             if isinstance(payload, dict):
-                events.append(payload)
+                events.append(dataclass_payload(event_response(payload)))
         return events
     job = load_job(output_root, job_id)
     metadata = job.get("metadata", {}) if job else {}
     fallback = metadata.get("events") if isinstance(metadata, dict) else None
-    return fallback if isinstance(fallback, list) else []
+    if not isinstance(fallback, list):
+        return []
+    return [
+        dataclass_payload(event_response(event)) for event in fallback if isinstance(event, dict)
+    ]
 
 
 def artifact_by_name(output_root: Path, job_id: str, artifact_name: str) -> Path | None:
