@@ -1,13 +1,17 @@
 import json
 import threading
 import urllib.request
+from io import BytesIO
 from pathlib import Path
+from types import SimpleNamespace
 
 from transcribe_doc.app.config import AppConfig, AppSection
 from transcribe_doc.app.models import ArtifactManifest, Job, JobStatus
 from transcribe_doc.core.batch import BatchItemResult, BatchResult
 from transcribe_doc.core.processing import ProcessingResult
 from transcribe_doc.ingest.manifest_loader import speaker_hint_to_manifest
+from transcribe_doc.service import job_endpoints, model_endpoints
+from transcribe_doc.service.request_parsing import payload_from_multipart_form
 from transcribe_doc.service import server as service_server
 from transcribe_doc.service.server import build_server, list_artifacts, list_events, list_jobs
 from transcribe_doc.storage.artifact_store import save_job
@@ -79,7 +83,7 @@ def test_http_health_and_jobs_endpoint(tmp_path: Path) -> None:
 def test_http_models_endpoint_returns_cache_status(tmp_path: Path, monkeypatch) -> None:
     config = AppConfig(app=AppSection(output_dir=str(tmp_path / "output")))
     monkeypatch.setattr(
-        service_server,
+        model_endpoints,
         "inspect_whisper_models",
         lambda: [{"name": "tiny", "status": "ready"}],
     )
@@ -129,7 +133,7 @@ def test_post_jobs_uses_shared_processing_entrypoint(tmp_path: Path, monkeypatch
             message="created",
         )
 
-    monkeypatch.setattr(service_server, "process_single_file", fake_process_single_file)
+    monkeypatch.setattr(job_endpoints, "process_single_file", fake_process_single_file)
 
     httpd = build_server(config=config, host="127.0.0.1", port=0)
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
@@ -174,7 +178,7 @@ def test_post_batch_returns_report(tmp_path: Path, monkeypatch) -> None:
             ],
         )
 
-    monkeypatch.setattr(service_server, "process_batch", fake_process_batch)
+    monkeypatch.setattr(job_endpoints, "process_batch", fake_process_batch)
 
     httpd = build_server(config=config, host="127.0.0.1", port=0)
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
@@ -207,6 +211,25 @@ def test_freeform_speaker_hint_ignores_capitalized_stop_words() -> None:
 
 def test_empty_speaker_hint_keeps_automatic_detection() -> None:
     assert speaker_hint_to_manifest("   ") == {}
+
+
+def test_multipart_payload_parser_stores_uploads(tmp_path: Path) -> None:
+    class FakeForm(dict):
+        pass
+
+    form = FakeForm(
+        media=SimpleNamespace(filename="source.wav", file=BytesIO(b"audio")),
+        speaker_hint=SimpleNamespace(value="Яков"),
+        title=SimpleNamespace(value="Planning sync"),
+        speaker_manifest=SimpleNamespace(filename="speakers.json", file=BytesIO(b"{}")),
+    )
+
+    payload = payload_from_multipart_form(form, tmp_path / "uploads")
+
+    assert Path(str(payload["input_path"])).read_bytes() == b"audio"
+    assert payload["speaker_hint"] == "Яков"
+    assert payload["display_title"] == "Planning sync"
+    assert Path(str(payload["speaker_manifest_path"])).read_bytes() == b"{}"
 
 
 def test_models_response_marks_interrupted_download_as_recoverable() -> None:
