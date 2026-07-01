@@ -11,7 +11,8 @@
     "e2e": "playwright test",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build --target aarch64-apple-darwin",
-    "package:mac": "bash ../scripts/package-mac.sh"
+    "package:mac": "bash ../scripts/package-mac.sh",
+    "install:local": "bash ../scripts/install-local-app.sh"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.0",
