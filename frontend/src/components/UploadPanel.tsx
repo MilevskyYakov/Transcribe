@@ -1,5 +1,36 @@
 import { Play, Upload } from "lucide-react";
-import type { FormEvent } from "react";
+import { useState } from "react";
+import type { DragEvent, FormEvent } from "react";
+
+export const UPLOAD_UNSUPPORTED_MEDIA_MESSAGE =
+  "Этот тип файла не поддерживается. Выберите аудио или видео файл.";
+
+const SUPPORTED_MEDIA_EXTENSIONS = new Set([
+  "mp3",
+  "wav",
+  "m4a",
+  "aac",
+  "flac",
+  "ogg",
+  "mp4",
+  "mov",
+  "mkv",
+  "avi",
+  "webm"
+]);
+
+const SUPPORTED_MEDIA_ACCEPT = [
+  "audio/*",
+  "video/*",
+  ...Array.from(SUPPORTED_MEDIA_EXTENSIONS, (extension) => `.${extension}`)
+].join(",");
+
+export function isSupportedMediaFile(file: Pick<File, "name" | "type">): boolean {
+  if (file.type.startsWith("audio/") || file.type.startsWith("video/")) return true;
+
+  const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
+  return SUPPORTED_MEDIA_EXTENSIONS.has(extension);
+}
 
 interface UploadPanelProps {
   canSubmitJob: boolean;
@@ -32,6 +63,52 @@ export function UploadPanel({
   onSubmitJob,
   onTranscriptionTitleChange
 }: UploadPanelProps) {
+  const [isDragActive, setIsDragActive] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  function selectMediaFile(file: File | null) {
+    if (file && !isSupportedMediaFile(file)) {
+      setUploadError(UPLOAD_UNSUPPORTED_MEDIA_MESSAGE);
+      return;
+    }
+
+    setUploadError(null);
+    onMediaFileChange(file);
+  }
+
+  function handleDrag(event: DragEvent<HTMLLabelElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "copy";
+  }
+
+  function handleDragEnter(event: DragEvent<HTMLLabelElement>) {
+    handleDrag(event);
+    setIsDragActive(true);
+  }
+
+  function handleDragLeave(event: DragEvent<HTMLLabelElement>) {
+    handleDrag(event);
+    const nextTarget = event.relatedTarget instanceof Node ? event.relatedTarget : null;
+    if (!nextTarget || !event.currentTarget.contains(nextTarget)) {
+      setIsDragActive(false);
+    }
+  }
+
+  function handleDrop(event: DragEvent<HTMLLabelElement>) {
+    handleDrag(event);
+    setIsDragActive(false);
+
+    const file = event.dataTransfer.files.item(0);
+    if (!file || !isSupportedMediaFile(file)) {
+      setUploadError(UPLOAD_UNSUPPORTED_MEDIA_MESSAGE);
+      return;
+    }
+
+    setUploadError(null);
+    onMediaFileChange(file);
+  }
+
   return (
     <form className="upload-hero" onSubmit={onSubmitJob}>
       <div>
@@ -39,11 +116,31 @@ export function UploadPanel({
         <h2>Загрузить запись</h2>
         <p>Выберите аудио или видео, добавьте участников при необходимости и запустите транскрибацию.</p>
       </div>
-      <label className="hero-file-picker">
+      <label
+        className={`hero-file-picker${isDragActive ? " is-drag-active" : ""}${
+          uploadError ? " has-error" : ""
+        }`}
+        aria-describedby={uploadError ? "upload-file-error" : undefined}
+        onDragEnter={handleDragEnter}
+        onDragOver={handleDrag}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
         <Upload size={28} />
-        <span>{mediaFile?.name ?? "Выбрать файл"}</span>
-        <input type="file" onChange={(event) => onMediaFileChange(event.target.files?.[0] ?? null)} />
+        <span>{isDragActive ? "Отпустите файл здесь" : mediaFile?.name ?? "Выбрать файл"}</span>
+        <input
+          type="file"
+          accept={SUPPORTED_MEDIA_ACCEPT}
+          onChange={(event) => {
+            selectMediaFile(event.target.files?.[0] ?? null);
+          }}
+        />
       </label>
+      {uploadError && (
+        <p className="upload-file-error" id="upload-file-error" role="alert">
+          {uploadError}
+        </p>
+      )}
       <label className="speaker-input">
         <span>Название транскрибации</span>
         <input
