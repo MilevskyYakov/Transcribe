@@ -622,6 +622,16 @@ textarea {
   text-align: center;
 }
 
+.hero-file-picker.is-drag-active {
+  border-color: #2364aa;
+  background: #eef6ff;
+  color: #123f6d;
+}
+
+.hero-file-picker.has-error {
+  border-color: #b42318;
+}
+
 .hero-file-picker span {
   max-width: 90%;
   overflow-wrap: anywhere;
@@ -634,6 +644,14 @@ textarea {
   inset: 0;
   opacity: 0;
   cursor: pointer;
+}
+
+.upload-file-error {
+  grid-column: 2;
+  margin: -8px 0 0;
+  color: #b42318;
+  font-size: 13px;
+  font-weight: 800;
 }
 
 .speaker-input {
