@@ -1,7 +1,7 @@
-import { Activity, AlertTriangle, Download, FileText, ListChecks } from "lucide-react";
+import { Activity, AlertTriangle, Download, FileText, FolderOpen, ListChecks } from "lucide-react";
 import type { ApiClient } from "../api";
 import { formatBytes, formatSeconds } from "../format";
-import type { Artifact, Job, JobEvent, TranscriptSegment, WordToken } from "../types";
+import type { Artifact, FinalMarkdownStatus, Job, JobEvent, TranscriptSegment, WordToken } from "../types";
 import {
   artifactDisplayName,
   compareArtifactsForDisplay,
@@ -20,9 +20,12 @@ import {
 
 interface JobWorkspaceProps {
   artifacts: Artifact[];
+  autosaveMarkdownDir: string | null;
   client: ApiClient;
   events: JobEvent[];
+  finalMarkdownStatus: FinalMarkdownStatus | null;
   isSelectedJobQuiet: boolean;
+  isSavingFinalMarkdown: boolean;
   notice: string | null;
   now: number;
   selectedDiarizationDiagnostic: string | null;
@@ -31,13 +34,19 @@ interface JobWorkspaceProps {
   selectedJobDisplayStatus: string | null;
   selectedLastEventTime: number | null;
   selectedSpeakerTurns: SpeakerTurn[];
+  onChooseFinalMarkdownFolder: () => void;
+  onOpenFinalMarkdown: () => void;
+  onSaveFinalMarkdownAgain: () => void;
 }
 
 export function JobWorkspace({
   artifacts,
+  autosaveMarkdownDir,
   client,
   events,
+  finalMarkdownStatus,
   isSelectedJobQuiet,
+  isSavingFinalMarkdown,
   notice,
   now,
   selectedDiarizationDiagnostic,
@@ -45,7 +54,10 @@ export function JobWorkspace({
   selectedJob,
   selectedJobDisplayStatus,
   selectedLastEventTime,
-  selectedSpeakerTurns
+  selectedSpeakerTurns,
+  onChooseFinalMarkdownFolder,
+  onOpenFinalMarkdown,
+  onSaveFinalMarkdownAgain
 }: JobWorkspaceProps) {
   return (
     <>
@@ -95,6 +107,15 @@ export function JobWorkspace({
                 isSelectedJobQuiet={isSelectedJobQuiet}
                 selectedDiarizationDiagnostic={selectedDiarizationDiagnostic}
                 selectedDisplayWarnings={selectedDisplayWarnings}
+              />
+              <FinalMarkdownPanel
+                autosaveMarkdownDir={autosaveMarkdownDir}
+                finalMarkdownStatus={finalMarkdownStatus}
+                isSaving={isSavingFinalMarkdown}
+                selectedJob={selectedJob}
+                onChooseFolder={onChooseFinalMarkdownFolder}
+                onOpenFile={onOpenFinalMarkdown}
+                onSaveAgain={onSaveFinalMarkdownAgain}
               />
               <ArtifactsPanel artifacts={artifacts} client={client} />
             </aside>
@@ -248,6 +269,62 @@ function DiagnosticsPanel({
               : "Предупреждений нет"}
           </p>
         )}
+      </div>
+    </section>
+  );
+}
+
+function FinalMarkdownPanel({
+  autosaveMarkdownDir,
+  finalMarkdownStatus,
+  isSaving,
+  selectedJob,
+  onChooseFolder,
+  onOpenFile,
+  onSaveAgain
+}: {
+  autosaveMarkdownDir: string | null;
+  finalMarkdownStatus: FinalMarkdownStatus | null;
+  isSaving: boolean;
+  selectedJob: Job;
+  onChooseFolder: () => void;
+  onOpenFile: () => void;
+  onSaveAgain: () => void;
+}) {
+  const savedPath = finalMarkdownStatus?.path ?? selectedJob.metadata.saved_markdown_path ?? null;
+  const filename = finalMarkdownStatus?.filename ?? selectedJob.metadata.saved_markdown_filename ?? null;
+  const missing = finalMarkdownStatus?.missing ?? selectedJob.metadata.saved_markdown_missing ?? false;
+  const message = missing
+    ? "Файл транскрипции не найден"
+    : finalMarkdownStatus?.message ??
+      selectedJob.metadata.saved_markdown_message ??
+      (autosaveMarkdownDir ? "Готовый Markdown будет сохранён автоматически" : "Выберите папку для сохранения транскрипций");
+
+  return (
+    <section>
+      <div className="pane-title">
+        <FolderOpen size={18} />
+        <h3>Сохранение Markdown</h3>
+      </div>
+      <div className="autosave-panel">
+        <p>{message}</p>
+        {autosaveMarkdownDir && <small>Папка: {autosaveMarkdownDir}</small>}
+        {filename && !missing && <strong>Сохранено: {filename}</strong>}
+        <div className="autosave-actions">
+          <button type="button" onClick={onChooseFolder}>
+            {autosaveMarkdownDir ? "Сменить папку" : "Выбрать папку"}
+          </button>
+          {savedPath && !missing && (
+            <button type="button" onClick={onOpenFile}>
+              Открыть файл
+            </button>
+          )}
+          {missing && (
+            <button type="button" disabled={isSaving} onClick={onSaveAgain}>
+              {isSaving ? "Сохраняю…" : "Сохранить заново"}
+            </button>
+          )}
+        </div>
       </div>
     </section>
   );

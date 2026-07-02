@@ -3,6 +3,7 @@ import type { AppEnvironment, BackendLifecycle } from "./types";
 interface TauriBootstrapPayload {
   api_base_url: string;
   default_model_name?: string | null;
+  autosave_markdown_dir?: string | null;
   app_data_dir: string;
   cache_dir: string;
   output_dir: string;
@@ -14,6 +15,7 @@ interface TauriBootstrapPayload {
 }
 
 export const DEFAULT_MODEL_STORAGE_KEY = "transcribe-doc-default-model";
+export const AUTOSAVE_MARKDOWN_DIR_STORAGE_KEY = "transcribe-doc-autosave-markdown-dir";
 
 declare global {
   interface Window {
@@ -39,6 +41,7 @@ export async function resolveAppEnvironment(defaultApiBase: string): Promise<App
     return {
       apiBaseUrl: normalizeBridgeValue(payload.api_base_url, defaultApiBase),
       defaultModelName: payload.default_model_name ?? null,
+      autosaveMarkdownDir: payload.autosave_markdown_dir ?? null,
       appDataDir: payload.app_data_dir,
       cacheDir: payload.cache_dir,
       outputDir: payload.output_dir,
@@ -107,6 +110,40 @@ export async function saveDefaultModel(modelName: string, isTauri: boolean): Pro
   }
   storage()?.setItem(DEFAULT_MODEL_STORAGE_KEY, normalized);
   return normalized;
+}
+
+export function loadWebAutosaveMarkdownDir(): string | null {
+  return normalizeOptionalValue(storage()?.getItem(AUTOSAVE_MARKDOWN_DIR_STORAGE_KEY));
+}
+
+export async function saveAutosaveMarkdownDir(
+  dir: string | null,
+  isTauri: boolean
+): Promise<string | null> {
+  const normalized = normalizeOptionalValue(dir);
+  if (isTauri) {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<string | null>("set_autosave_markdown_dir", { dir: normalized });
+  }
+  if (normalized) {
+    storage()?.setItem(AUTOSAVE_MARKDOWN_DIR_STORAGE_KEY, normalized);
+  } else {
+    storage()?.removeItem(AUTOSAVE_MARKDOWN_DIR_STORAGE_KEY);
+  }
+  return normalized;
+}
+
+export async function chooseAutosaveMarkdownDir(isTauri: boolean): Promise<string | null> {
+  if (!isTauri) return null;
+  const { open } = await import("@tauri-apps/plugin-dialog");
+  const selected = await open({ directory: true, multiple: false });
+  return typeof selected === "string" ? selected : null;
+}
+
+export async function openSavedMarkdownPath(path: string, isTauri: boolean): Promise<void> {
+  if (!isTauri) return;
+  const { open } = await import("@tauri-apps/plugin-shell");
+  await open(path);
 }
 
 function normalizeBridgeValue(value: string | null | undefined, fallback: string): string {
