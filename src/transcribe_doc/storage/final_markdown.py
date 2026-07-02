@@ -11,6 +11,7 @@ from typing import Any
 from transcribe_doc.app.models import SpeakerMapping, TranscriptSegment
 from transcribe_doc.export.writers import write_final_text_md
 from transcribe_doc.service.types import JsonObject
+from transcribe_doc.storage.speaker_review import apply_speaker_assignments_to_segments
 
 WINDOWS_RESERVED_NAMES = {
     "CON",
@@ -100,7 +101,10 @@ def save_final_markdown(job: JsonObject, output_root: Path, autosave_dir: str | 
         raise ValueError("Путь сохранения должен быть папкой")
     destination_dir.mkdir(parents=True, exist_ok=True)
 
-    segments = _load_segments(output_root, str(job.get("job_id") or ""))
+    segments = apply_speaker_assignments_to_segments(
+        job,
+        _load_segments(output_root, str(job.get("job_id") or "")),
+    )
     filename = title_derived_markdown_filename(job)
     target = destination_dir / filename
     previous_path = _string_or_none(_metadata(job).get("saved_markdown_path"))

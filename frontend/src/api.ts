@@ -5,6 +5,7 @@ import type {
   Job,
   JobEvent,
   ModelsPayload,
+  SpeakerReviewPayload,
   TranscriptSegment,
   WordToken
 } from "./types";
@@ -52,6 +53,27 @@ export class ApiClient {
 
   async finalMarkdownStatus(jobId: string): Promise<FinalMarkdownStatus> {
     return this.get(`/jobs/${encodeURIComponent(jobId)}/final-markdown`);
+  }
+
+  async speakerReview(jobId: string): Promise<SpeakerReviewPayload> {
+    return this.get(`/jobs/${encodeURIComponent(jobId)}/speaker-review`);
+  }
+
+  async saveSpeakerReview(
+    jobId: string,
+    assignments: Record<string, string>,
+    options: { skipped?: boolean; autosaveDir?: string | null } = {}
+  ): Promise<{ speaker_review: SpeakerReviewPayload; final_markdown?: FinalMarkdownStatus }> {
+    const response = await fetch(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/speaker-review`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        assignments,
+        skipped: options.skipped ?? false,
+        autosave_dir: options.autosaveDir || undefined
+      })
+    });
+    return this.parseResponse(response);
   }
 
   async saveFinalMarkdown(jobId: string, autosaveDir: string): Promise<FinalMarkdownStatus> {

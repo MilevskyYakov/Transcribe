@@ -42,6 +42,11 @@ from transcribe_doc.storage.final_markdown import (
     sync_saved_markdown_metadata,
     title_derived_markdown_filename,
 )
+from transcribe_doc.storage.speaker_review import (
+    apply_speaker_assignments_to_segment_payloads,
+    build_speaker_review_payload,
+    update_speaker_assignments,
+)
 
 
 def list_jobs_endpoint(ctx: Any) -> ApiResponse:
@@ -61,15 +66,62 @@ def transcript_endpoint(ctx: Any, job_id: str) -> ApiResponse:
         return json_response({"error": "job_not_found"}, HTTPStatus.NOT_FOUND)
     segments = read_json_file(job_dir / "segments.json", [])
     words = read_json_file(job_dir / "words.json", [])
+    job = load_job(ctx.output_root, job_id)
+    segment_payloads = segments if isinstance(segments, list) else []
+    if job is not None:
+        segment_payloads = apply_speaker_assignments_to_segment_payloads(job, segment_payloads)
     return json_response(
         dataclass_payload(
             TranscriptResponse(
-                job=load_job(ctx.output_root, job_id),
-                segments=segments if isinstance(segments, list) else [],
+                job=job,
+                segments=segment_payloads,
                 words=words if isinstance(words, list) else [],
             )
         )
     )
+
+
+def speaker_review_endpoint(ctx: Any, job_id: str) -> ApiResponse:
+    job = load_job(ctx.output_root, job_id)
+    if job is None:
+        return json_response({"error": "job_not_found"}, HTTPStatus.NOT_FOUND)
+    segments = read_json_file(ctx.output_root / job_id / "segments.json", [])
+    segment_payloads = segments if isinstance(segments, list) else []
+    return json_response(build_speaker_review_payload(job, segment_payloads))
+
+
+def update_speaker_review_endpoint(ctx: Any, job_id: str) -> ApiResponse:
+    job = load_job(ctx.output_root, job_id)
+    if job is None:
+        return json_response({"error": "job_not_found"}, HTTPStatus.NOT_FOUND)
+    segments = read_json_file(ctx.output_root / job_id / "segments.json", [])
+    segment_payloads = segments if isinstance(segments, list) else []
+    try:
+        payload = ctx.read_json_object()
+        raw_assignments = payload.get("assignments", {})
+        if not isinstance(raw_assignments, dict):
+            raise ValueError("'assignments' must be an object.")
+        review_payload = update_speaker_assignments(
+            job,
+            segment_payloads,
+            {str(key): str(value) for key, value in raw_assignments.items()},
+            skipped=bool(payload.get("skipped", False)),
+        )
+        final_markdown = None
+        autosave_dir = payload.get("autosave_dir")
+        if isinstance(autosave_dir, str) and autosave_dir.strip():
+            status = save_final_markdown(job, ctx.output_root, autosave_dir)
+            sync_saved_markdown_metadata(job, status)
+            final_markdown = status.to_payload()
+        write_job_payload(ctx.output_root / job_id / "job.json", job)
+    except FileNotFoundError as error:
+        return json_response({"error": str(error)}, HTTPStatus.NOT_FOUND)
+    except ValueError as error:
+        return json_response({"error": str(error)}, HTTPStatus.BAD_REQUEST)
+    response = {"speaker_review": review_payload}
+    if final_markdown is not None:
+        response["final_markdown"] = final_markdown
+    return json_response(response)
 
 
 def artifacts_endpoint(ctx: Any, job_id: str) -> ApiResponse:
