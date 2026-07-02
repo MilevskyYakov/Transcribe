@@ -11,6 +11,7 @@ from transcribe_doc.service.http_response import ApiResponse, json_response
 from transcribe_doc.service.job_endpoints import (
     artifact_download_endpoint,
     artifacts_endpoint,
+    cleanup_temp_endpoint,
     create_batch_endpoint,
     create_job_endpoint,
     events_endpoint,
@@ -58,6 +59,7 @@ ROUTES = [
     Route("GET", ("jobs", "{job_id}", "artifacts"), artifacts_endpoint),
     Route("GET", ("jobs", "{job_id}", "events"), events_endpoint),
     Route("GET", ("jobs", "{job_id}", "artifacts", "{artifact_name}"), artifact_download_endpoint),
+    Route("POST", ("cleanup", "temp"), cleanup_temp_endpoint),
     Route("POST", ("jobs",), create_job_endpoint),
     Route("POST", ("jobs", "{job_id}", "final-markdown"), save_final_markdown_endpoint),
     Route("POST", ("batch",), create_batch_endpoint),

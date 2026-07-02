@@ -105,6 +105,13 @@ export interface FinalMarkdownStatus {
   missing?: boolean;
 }
 
+export interface TempCleanupReport {
+  removed_files: string[];
+  removed_count: number;
+  freed_bytes: number;
+  errors: string[];
+}
+
 export interface JobEvent {
   timestamp: string;
   stage: string;
