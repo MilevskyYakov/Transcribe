@@ -1,12 +1,16 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { ApiClient, normalizeBaseUrl } from "./api";
 import {
+  chooseAutosaveMarkdownDir,
   loadBackendStatus,
+  loadWebAutosaveMarkdownDir,
   loadWebDefaultModel,
   markBackendOffline,
   markBackendOnline,
+  openSavedMarkdownPath,
   resolveAppEnvironment,
   restartBackend,
+  saveAutosaveMarkdownDir,
   saveDefaultModel
 } from "./appEnvironment";
 import {
@@ -34,6 +38,7 @@ import type {
   AppEnvironment,
   Artifact,
   BackendLifecycle,
+  FinalMarkdownStatus,
   HealthPayload,
   Job,
   JobEvent,
@@ -87,6 +92,9 @@ export function App() {
   const [transcriptionTitle, setTranscriptionTitle] = useState("");
   const [speakerHint, setSpeakerHint] = useState("");
   const [selectedModelName, setSelectedModelName] = useState(() => loadWebDefaultModel() ?? "large-v3");
+  const [autosaveMarkdownDir, setAutosaveMarkdownDir] = useState(() => loadWebAutosaveMarkdownDir());
+  const [finalMarkdownStatus, setFinalMarkdownStatus] = useState<FinalMarkdownStatus | null>(null);
+  const [isSavingFinalMarkdown, setIsSavingFinalMarkdown] = useState(false);
   const [isModelsOpen, setIsModelsOpen] = useState(false);
   const [batchPaths, setBatchPaths] = useState("");
   const [watchFolder, setWatchFolder] = useState("");
@@ -182,6 +190,7 @@ export function App() {
         if (environment.defaultModelName) {
           setSelectedModelName(environment.defaultModelName);
         }
+        setAutosaveMarkdownDir(environment.autosaveMarkdownDir ?? null);
       }
     });
     return () => {
@@ -243,19 +252,22 @@ export function App() {
       setSegments([]);
       setArtifacts([]);
       setEvents([]);
+      setFinalMarkdownStatus(null);
       return;
     }
     let isActive = true;
     Promise.all([
       client.getTranscript(selectedJobId),
       client.listArtifacts(selectedJobId),
-      client.listEvents(selectedJobId)
+      client.listEvents(selectedJobId),
+      client.finalMarkdownStatus(selectedJobId)
     ])
-      .then(([transcript, nextArtifacts, nextEvents]) => {
+      .then(([transcript, nextArtifacts, nextEvents, nextFinalMarkdownStatus]) => {
         if (!isActive) return;
         setSegments(transcript.segments);
         setArtifacts(nextArtifacts);
         setEvents(nextEvents);
+        setFinalMarkdownStatus(nextFinalMarkdownStatus);
       })
       .catch((error) => {
         if (isActive) setNotice(error instanceof Error ? error.message : "Задача недоступна");
@@ -264,6 +276,17 @@ export function App() {
       isActive = false;
     };
   }, [client, selectedJobId, selectedJobRefreshKey]);
+
+  useEffect(() => {
+    if (!selectedJob || displayStatus(selectedJob) !== "completed") return;
+    if (finalMarkdownStatus?.status === "saved" || finalMarkdownStatus?.status === "missing") return;
+    if (!autosaveMarkdownDir) {
+      setNotice("Выберите папку для сохранения транскрипций");
+      return;
+    }
+    if (isSavingFinalMarkdown) return;
+    void saveSelectedFinalMarkdown(autosaveMarkdownDir);
+  }, [autosaveMarkdownDir, finalMarkdownStatus?.status, isSavingFinalMarkdown, selectedJob?.job_id, selectedJob?.status]);
 
   function handleMediaFileChange(file: File | null) {
     setMediaFile(file);
@@ -397,6 +420,54 @@ export function App() {
     }
   }
 
+  async function chooseFinalMarkdownFolder() {
+    try {
+      let selected = await chooseAutosaveMarkdownDir(isManagedApp);
+      if (!selected && !isManagedApp) {
+        selected = window.prompt("Папка для сохранения транскрипций", autosaveMarkdownDir ?? "");
+      }
+      if (!selected) return;
+      const saved = await saveAutosaveMarkdownDir(selected, isManagedApp);
+      setAutosaveMarkdownDir(saved);
+      setAppEnvironment((current) => (current ? { ...current, autosaveMarkdownDir: saved } : current));
+      setNotice(saved ? `Папка сохранения: ${saved}` : null);
+      if (selectedJob && displayStatus(selectedJob) === "completed" && saved) {
+        await saveSelectedFinalMarkdown(saved);
+      }
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Не удалось выбрать папку сохранения");
+    }
+  }
+
+  async function saveSelectedFinalMarkdown(dir = autosaveMarkdownDir) {
+    if (!selectedJob) return;
+    if (!dir) {
+      setNotice("Выберите папку для сохранения транскрипций");
+      return;
+    }
+    setIsSavingFinalMarkdown(true);
+    try {
+      const status = await client.saveFinalMarkdown(selectedJob.job_id, dir);
+      setFinalMarkdownStatus(status);
+      await refresh();
+      setNotice(status.message);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Не удалось сохранить Markdown");
+    } finally {
+      setIsSavingFinalMarkdown(false);
+    }
+  }
+
+  async function openFinalMarkdown() {
+    const path = finalMarkdownStatus?.path ?? selectedJob?.metadata.saved_markdown_path ?? null;
+    if (!path) return;
+    try {
+      await openSavedMarkdownPath(path, isManagedApp);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Не удалось открыть файл");
+    }
+  }
+
   return (
     <main className="app-shell">
       <AppSidebar
@@ -443,9 +514,12 @@ export function App() {
         />
         <JobWorkspace
           artifacts={artifacts}
+          autosaveMarkdownDir={autosaveMarkdownDir}
           client={client}
           events={events}
+          finalMarkdownStatus={finalMarkdownStatus}
           isSelectedJobQuiet={isSelectedJobQuiet}
+          isSavingFinalMarkdown={isSavingFinalMarkdown}
           notice={notice}
           now={now}
           selectedDiarizationDiagnostic={selectedDiarizationDiagnostic}
@@ -454,6 +528,9 @@ export function App() {
           selectedJobDisplayStatus={selectedJobDisplayStatus}
           selectedLastEventTime={selectedLastEventTime}
           selectedSpeakerTurns={selectedSpeakerTurns}
+          onChooseFinalMarkdownFolder={() => void chooseFinalMarkdownFolder()}
+          onOpenFinalMarkdown={() => void openFinalMarkdown()}
+          onSaveFinalMarkdownAgain={() => void saveSelectedFinalMarkdown()}
         />
       </section>
 

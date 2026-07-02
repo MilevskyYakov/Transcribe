@@ -4,12 +4,15 @@ use std::{fs, path::Path};
 #[derive(Deserialize, Serialize)]
 pub(crate) struct AppSettings {
     pub(crate) default_model_name: String,
+    #[serde(default)]
+    pub(crate) autosave_markdown_dir: Option<String>,
 }
 
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
             default_model_name: "large-v3".to_string(),
+            autosave_markdown_dir: None,
         }
     }
 }

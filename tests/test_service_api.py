@@ -183,6 +183,45 @@ def test_transcript_artifacts_events_endpoints_use_contract_payloads(tmp_path: P
     }
 
 
+def test_final_markdown_endpoint_saves_external_file_and_uses_title_download_name(
+    tmp_path: Path,
+) -> None:
+    output_root = tmp_path / "output"
+    job_dir = output_root / "job-local"
+    job_dir.mkdir(parents=True)
+    segments_path = job_dir / "segments.json"
+    final_text_path = job_dir / "final_speech_text.md"
+    segments_path.write_text(
+        '[{"segment_id":"s1","start_seconds":0,"end_seconds":1,"text_raw":"Hi","text_clean":"Hi"}]',
+        encoding="utf-8",
+    )
+    final_text_path.write_text("# internal\n", encoding="utf-8")
+    save_job(
+        Job(
+            job_id="job-local",
+            source_paths=["sample.wav"],
+            status=JobStatus.COMPLETED,
+            artifacts=ArtifactManifest(final_speech_text_md=str(final_text_path)),
+            metadata={"display_title": "Client call"},
+        ),
+        job_dir / "job.json",
+    )
+    autosave_dir = tmp_path / "saved"
+    ctx = SimpleNamespace(
+        output_root=output_root,
+        read_json_object=lambda: {"autosave_dir": str(autosave_dir)},
+    )
+
+    saved = job_endpoints.save_final_markdown_endpoint(ctx, "job-local")
+    status = job_endpoints.final_markdown_status_endpoint(ctx, "job-local")
+    download = job_endpoints.artifact_download_endpoint(ctx, "job-local", "final_speech_text_md")
+
+    assert saved.payload["message"] == "Сохранено: Client call.md"
+    assert (autosave_dir / "Client call.md").exists()
+    assert status.payload["status"] == "saved"
+    assert download.download_name == "Client call.md"
+
+
 def test_post_jobs_uses_shared_processing_entrypoint(tmp_path: Path, monkeypatch) -> None:
     output_root = tmp_path / "output"
     config = AppConfig(app=AppSection(output_dir=str(output_root)))

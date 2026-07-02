@@ -44,6 +44,12 @@ export interface JobMetadata {
   progress?: number | null;
   events?: JobEvent[];
   diarization_quality?: DiarizationQuality | null;
+  saved_markdown_path?: string | null;
+  saved_markdown_filename?: string | null;
+  saved_markdown_dir?: string | null;
+  saved_markdown_status?: string | null;
+  saved_markdown_message?: string | null;
+  saved_markdown_missing?: boolean | null;
   [key: string]: unknown;
 }
 
@@ -89,6 +95,14 @@ export interface Artifact {
   filename: string;
   size_bytes: number;
   download_url: string;
+}
+
+export interface FinalMarkdownStatus {
+  status: string;
+  message: string;
+  path?: string | null;
+  filename?: string | null;
+  missing?: boolean;
 }
 
 export interface JobEvent {
@@ -143,6 +157,7 @@ export interface AppEnvironment {
   apiBaseUrl: string;
   backendLifecycle?: BackendLifecycle | null;
   defaultModelName?: string | null;
+  autosaveMarkdownDir?: string | null;
   appDataDir?: string | null;
   cacheDir?: string | null;
   outputDir?: string | null;

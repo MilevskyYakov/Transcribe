@@ -34,6 +34,7 @@ pub(crate) struct AppBootstrap {
     pub(crate) ffmpeg_path: Option<String>,
     pub(crate) ffprobe_path: Option<String>,
     pub(crate) default_model_name: String,
+    pub(crate) autosave_markdown_dir: Option<String>,
     pub(crate) backend_lifecycle: BackendLifecycleSnapshot,
 }
 
@@ -50,6 +51,7 @@ pub(crate) struct BackendState {
     pub(crate) media_bin_dir: PathBuf,
     pub(crate) settings_path: PathBuf,
     pub(crate) default_model_name: Mutex<String>,
+    pub(crate) autosave_markdown_dir: Mutex<Option<String>>,
     config_path: PathBuf,
     runtime: Mutex<BackendRuntime>,
 }
@@ -257,6 +259,7 @@ pub(crate) fn start_backend<R: Runtime>(
         media_bin_dir,
         settings_path,
         default_model_name: Mutex::new(settings.default_model_name),
+        autosave_markdown_dir: Mutex::new(settings.autosave_markdown_dir),
         config_path,
         runtime: Mutex::new(BackendRuntime {
             api_base_url: String::new(),

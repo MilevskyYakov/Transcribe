@@ -12,6 +12,11 @@ pub(crate) fn app_bootstrap(state: tauri::State<'_, BackendState>) -> AppBootstr
         .lock()
         .map(|value| value.clone())
         .unwrap_or_else(|_| AppSettings::default().default_model_name);
+    let autosave_markdown_dir = state
+        .autosave_markdown_dir
+        .lock()
+        .ok()
+        .and_then(|value| value.clone());
     AppBootstrap {
         api_base_url: state.api_base_url(),
         app_data_dir: state.app_data_dir.display().to_string(),
@@ -22,6 +27,7 @@ pub(crate) fn app_bootstrap(state: tauri::State<'_, BackendState>) -> AppBootstr
         ffmpeg_path: ffmpeg_path.map(|path| path.display().to_string()),
         ffprobe_path: ffprobe_path.map(|path| path.display().to_string()),
         default_model_name,
+        autosave_markdown_dir,
         backend_lifecycle: state.lifecycle(),
     }
 }
@@ -69,6 +75,11 @@ pub(crate) fn set_default_model(
         &state.settings_path,
         &AppSettings {
             default_model_name: model_name.clone(),
+            autosave_markdown_dir: state
+                .autosave_markdown_dir
+                .lock()
+                .ok()
+                .and_then(|value| value.clone()),
         },
     )
     .map_err(|error| format!("Failed to save default model: {error}"))?;
@@ -76,4 +87,35 @@ pub(crate) fn set_default_model(
         *current = model_name.clone();
     }
     Ok(model_name)
+}
+
+#[tauri::command]
+pub(crate) fn set_autosave_markdown_dir(
+    dir: Option<String>,
+    state: tauri::State<'_, BackendState>,
+) -> Result<Option<String>, String> {
+    let normalized = dir.and_then(|value| {
+        let trimmed = value.trim().to_string();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed)
+        }
+    });
+    save_settings(
+        &state.settings_path,
+        &AppSettings {
+            default_model_name: state
+                .default_model_name
+                .lock()
+                .map(|value| value.clone())
+                .unwrap_or_else(|_| AppSettings::default().default_model_name),
+            autosave_markdown_dir: normalized.clone(),
+        },
+    )
+    .map_err(|error| format!("Failed to save autosave folder: {error}"))?;
+    if let Ok(mut current) = state.autosave_markdown_dir.lock() {
+        *current = normalized.clone();
+    }
+    Ok(normalized)
 }

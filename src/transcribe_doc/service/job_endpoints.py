@@ -26,6 +26,7 @@ from transcribe_doc.service.job_store import (
     list_jobs,
     load_job,
     read_json_file,
+    write_job_payload,
     write_failed_job_payload,
 )
 from transcribe_doc.service.responses import (
@@ -35,6 +36,12 @@ from transcribe_doc.service.responses import (
     job_to_response,
 )
 from transcribe_doc.service.types import JsonObject
+from transcribe_doc.storage.final_markdown import (
+    inspect_saved_final_markdown,
+    save_final_markdown,
+    sync_saved_markdown_metadata,
+    title_derived_markdown_filename,
+)
 
 
 def list_jobs_endpoint(ctx: Any) -> ApiResponse:
@@ -81,7 +88,41 @@ def artifact_download_endpoint(ctx: Any, job_id: str, artifact_name: str) -> Api
     artifact = artifact_by_name(ctx.output_root, job_id, artifact_name)
     if artifact is None:
         return json_response({"error": "artifact_not_found"}, HTTPStatus.NOT_FOUND)
-    return file_response(artifact, artifact.name)
+    download_name = artifact.name
+    if artifact_name == "final_speech_text_md":
+        job = load_job(ctx.output_root, job_id)
+        if job is not None:
+            download_name = title_derived_markdown_filename(job)
+    return file_response(artifact, download_name)
+
+
+def final_markdown_status_endpoint(ctx: Any, job_id: str) -> ApiResponse:
+    job = load_job(ctx.output_root, job_id)
+    if job is None:
+        return json_response({"error": "job_not_found"}, HTTPStatus.NOT_FOUND)
+    status = inspect_saved_final_markdown(job)
+    sync_saved_markdown_metadata(job, status)
+    write_job_payload(ctx.output_root / job_id / "job.json", job)
+    return json_response(status.to_payload())
+
+
+def save_final_markdown_endpoint(ctx: Any, job_id: str) -> ApiResponse:
+    job = load_job(ctx.output_root, job_id)
+    if job is None:
+        return json_response({"error": "job_not_found"}, HTTPStatus.NOT_FOUND)
+    try:
+        payload = ctx.read_json_object()
+        autosave_dir = payload.get("autosave_dir")
+        if not isinstance(autosave_dir, str) or not autosave_dir.strip():
+            raise ValueError("Выберите папку для сохранения транскрипций")
+        status = save_final_markdown(job, ctx.output_root, autosave_dir)
+        sync_saved_markdown_metadata(job, status)
+        write_job_payload(ctx.output_root / job_id / "job.json", job)
+    except FileNotFoundError as error:
+        return json_response({"error": str(error)}, HTTPStatus.NOT_FOUND)
+    except ValueError as error:
+        return json_response({"error": str(error)}, HTTPStatus.BAD_REQUEST)
+    return json_response(status.to_payload())
 
 
 def create_job_endpoint(ctx: Any) -> ApiResponse:

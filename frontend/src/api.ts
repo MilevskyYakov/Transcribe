@@ -1,5 +1,6 @@
 import type {
   Artifact,
+  FinalMarkdownStatus,
   HealthPayload,
   Job,
   JobEvent,
@@ -47,6 +48,19 @@ export class ApiClient {
       `/jobs/${encodeURIComponent(jobId)}/events`
     );
     return payload.events;
+  }
+
+  async finalMarkdownStatus(jobId: string): Promise<FinalMarkdownStatus> {
+    return this.get(`/jobs/${encodeURIComponent(jobId)}/final-markdown`);
+  }
+
+  async saveFinalMarkdown(jobId: string, autosaveDir: string): Promise<FinalMarkdownStatus> {
+    const response = await fetch(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/final-markdown`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ autosave_dir: autosaveDir })
+    });
+    return this.parseResponse(response);
   }
 
   async listModels(): Promise<ModelsPayload> {
