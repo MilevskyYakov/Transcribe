@@ -1,7 +1,8 @@
-import { Activity, AlertTriangle, Download, FileText, FolderOpen, ListChecks } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Activity, AlertTriangle, Download, FileText, FolderOpen, ListChecks, Users } from "lucide-react";
 import type { ApiClient } from "../api";
 import { formatBytes, formatSeconds } from "../format";
-import type { Artifact, FinalMarkdownStatus, Job, JobEvent, TranscriptSegment, WordToken } from "../types";
+import type { Artifact, FinalMarkdownStatus, Job, JobEvent, SpeakerReviewPayload, TranscriptSegment, WordToken } from "../types";
 import {
   artifactDisplayName,
   compareArtifactsForDisplay,
@@ -34,9 +35,12 @@ interface JobWorkspaceProps {
   selectedJobDisplayStatus: string | null;
   selectedLastEventTime: number | null;
   selectedSpeakerTurns: SpeakerTurn[];
+  speakerReview: SpeakerReviewPayload | null;
   onChooseFinalMarkdownFolder: () => void;
   onOpenFinalMarkdown: () => void;
   onSaveFinalMarkdownAgain: () => void;
+  onSaveSpeakerAssignments: (assignments: Record<string, string>) => void;
+  onSkipSpeakerAssignments: (assignments: Record<string, string>) => void;
 }
 
 export function JobWorkspace({
@@ -55,9 +59,12 @@ export function JobWorkspace({
   selectedJobDisplayStatus,
   selectedLastEventTime,
   selectedSpeakerTurns,
+  speakerReview,
   onChooseFinalMarkdownFolder,
   onOpenFinalMarkdown,
-  onSaveFinalMarkdownAgain
+  onSaveFinalMarkdownAgain,
+  onSaveSpeakerAssignments,
+  onSkipSpeakerAssignments
 }: JobWorkspaceProps) {
   return (
     <>
@@ -102,6 +109,12 @@ export function JobWorkspace({
           <div className="content-grid">
             <TranscriptPane turns={selectedSpeakerTurns} />
             <aside className="detail-pane">
+              <SpeakerReviewPanel
+                isSaving={isSavingFinalMarkdown}
+                review={speakerReview}
+                onSave={onSaveSpeakerAssignments}
+                onSkip={onSkipSpeakerAssignments}
+              />
               <ProcessPanel events={events} selectedJob={selectedJob} />
               <DiagnosticsPanel
                 isSelectedJobQuiet={isSelectedJobQuiet}
@@ -200,6 +213,79 @@ function needsTerminalPunctuation(text: string, lastWord: string): boolean {
   if (!text || !lastWord) return false;
   const terminal = text[text.length - 1];
   return [".", "!", "?", "…"].includes(terminal) && !lastWord.endsWith(terminal);
+}
+
+
+function SpeakerReviewPanel({
+  isSaving,
+  review,
+  onSave,
+  onSkip
+}: {
+  isSaving: boolean;
+  review: SpeakerReviewPayload | null;
+  onSave: (assignments: Record<string, string>) => void;
+  onSkip: (assignments: Record<string, string>) => void;
+}) {
+  const [assignments, setAssignments] = useState<Record<string, string>>({});
+  const groups = review?.groups ?? [];
+  const isPending = review?.status === "pending";
+
+  useEffect(() => {
+    const next: Record<string, string> = {};
+    for (const group of groups) {
+      next[group.machine_label] = group.display_label === group.fallback_label ? "" : group.display_label;
+    }
+    setAssignments(next);
+  }, [review?.status, groups.map((group) => `${group.machine_label}:${group.display_label}`).join("|")]);
+
+  if (!groups.length || review?.status === "not_required") return null;
+
+  return (
+    <section className={isPending ? "speaker-review-panel pending" : "speaker-review-panel"}>
+      <div className="pane-title">
+        <Users size={18} />
+        <h3>Проверьте спикеров</h3>
+      </div>
+      <p className="speaker-review-help">
+        Назначьте имена по примерным репликам. Если оставить пусто, в файле будет «Спикер 1», «Спикер 2».
+      </p>
+      <div className="speaker-review-list">
+        {groups.map((group) => (
+          <label className="speaker-review-row" key={group.machine_label}>
+            <span>
+              <strong>{group.fallback_label}</strong>
+              {group.example && <small>“{group.example}”</small>}
+            </span>
+            <input
+              list={`speaker-suggestions-${group.machine_label}`}
+              placeholder={group.fallback_label}
+              value={assignments[group.machine_label] ?? ""}
+              onChange={(event) =>
+                setAssignments((current) => ({
+                  ...current,
+                  [group.machine_label]: event.target.value
+                }))
+              }
+            />
+            <datalist id={`speaker-suggestions-${group.machine_label}`}>
+              {group.suggestions.map((suggestion) => (
+                <option key={suggestion} value={suggestion} />
+              ))}
+            </datalist>
+          </label>
+        ))}
+      </div>
+      <div className="speaker-review-actions">
+        <button type="button" disabled={isSaving} onClick={() => onSave(assignments)}>
+          {isSaving ? "Сохраняю…" : "Сохранить транскрипцию"}
+        </button>
+        <button type="button" disabled={isSaving} onClick={() => onSkip({})}>
+          Пропустить и сохранить
+        </button>
+      </div>
+    </section>
+  );
 }
 
 function ProcessPanel({ events, selectedJob }: { events: JobEvent[]; selectedJob: Job }) {

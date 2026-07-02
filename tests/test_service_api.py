@@ -183,6 +183,54 @@ def test_transcript_artifacts_events_endpoints_use_contract_payloads(tmp_path: P
     }
 
 
+
+def test_speaker_review_endpoint_persists_assignment_and_saves_markdown(tmp_path: Path) -> None:
+    output_root = tmp_path / "output"
+    job_dir = output_root / "job-local"
+    job_dir.mkdir(parents=True)
+    (job_dir / "segments.json").write_text(
+        '[{"segment_id":"s1","start_seconds":0,"end_seconds":1,"text_raw":"Hi",'
+        '"text_clean":"Привет","speaker_label":"SPEAKER_00"},'
+        '{"segment_id":"s2","start_seconds":1,"end_seconds":2,"text_raw":"Yo",'
+        '"text_clean":"Ответ","speaker_label":"SPEAKER_01"}]',
+        encoding="utf-8",
+    )
+    save_job(
+        Job(
+            job_id="job-local",
+            source_paths=["sample.wav"],
+            status=JobStatus.COMPLETED,
+            metadata={
+                "display_title": "Client call",
+                "speaker_manifest": {"expected_speakers": [{"name": "Яков"}]},
+            },
+        ),
+        job_dir / "job.json",
+    )
+    autosave_dir = tmp_path / "saved"
+    ctx = SimpleNamespace(
+        output_root=output_root,
+        read_json_object=lambda: {
+            "assignments": {"SPEAKER_00": "Яков"},
+            "autosave_dir": str(autosave_dir),
+        },
+    )
+
+    review = job_endpoints.speaker_review_endpoint(ctx, "job-local")
+    saved = job_endpoints.update_speaker_review_endpoint(ctx, "job-local")
+    transcript = job_endpoints.transcript_endpoint(ctx, "job-local")
+
+    assert review.payload["status"] == "pending"
+    assert review.payload["groups"][0]["fallback_label"] == "Спикер 1"
+    assert saved.payload["speaker_review"]["status"] == "confirmed"
+    assert saved.payload["final_markdown"]["status"] == "saved"
+    content = (autosave_dir / "Client call.md").read_text(encoding="utf-8")
+    assert "Яков: Привет" in content
+    assert "Спикер 2: Ответ" in content
+    assert "SPEAKER_" not in content
+    assert transcript.payload["segments"][0]["speaker_label"] == "Яков"
+    assert transcript.payload["segments"][1]["speaker_label"] == "Спикер 2"
+
 def test_final_markdown_endpoint_saves_external_file_and_uses_title_download_name(
     tmp_path: Path,
 ) -> None:

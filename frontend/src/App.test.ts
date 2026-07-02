@@ -227,6 +227,29 @@ describe("transcript presentation", () => {
     ]);
   });
 
+  it("hides raw diarization ids behind human fallback labels", () => {
+    const turns = speakerTurns([
+      {
+        segment_id: "seg-001",
+        start_seconds: 0,
+        end_seconds: 10,
+        text_raw: "первая часть",
+        text_clean: "первая часть",
+        speaker_label: "SPEAKER_00"
+      },
+      {
+        segment_id: "seg-002",
+        start_seconds: 10,
+        end_seconds: 20,
+        text_raw: "ответ",
+        text_clean: "ответ",
+        speaker_label: "SPEAKER_01"
+      }
+    ]);
+
+    expect(turns.map((turn) => turn.speakerLabel)).toEqual(["Спикер 1", "Спикер 2"]);
+  });
+
   it("keeps word diagnostics inside grouped speaker turns", () => {
     const turns = speakerTurns([
       {

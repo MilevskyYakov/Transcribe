@@ -105,6 +105,20 @@ export interface FinalMarkdownStatus {
   missing?: boolean;
 }
 
+export interface SpeakerReviewGroup {
+  machine_label: string;
+  fallback_label: string;
+  display_label: string;
+  example: string;
+  suggestions: string[];
+}
+
+export interface SpeakerReviewPayload {
+  status: "pending" | "confirmed" | "skipped" | "not_required" | string;
+  groups: SpeakerReviewGroup[];
+  suggestions: string[];
+}
+
 export interface JobEvent {
   timestamp: string;
   stage: string;
