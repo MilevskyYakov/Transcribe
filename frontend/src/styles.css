@@ -1097,3 +1097,58 @@ textarea {
     width: 100%;
   }
 }
+
+.speaker-review-panel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #d8ded9;
+  border-left: 4px solid #7b8a80;
+  background: #ffffff;
+  padding: 14px;
+}
+
+.speaker-review-panel.pending {
+  border-left-color: #1f9d64;
+  background: #f6fbf8;
+}
+
+.speaker-review-help {
+  margin: 0;
+  color: #51615a;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.speaker-review-list {
+  display: grid;
+  gap: 10px;
+}
+
+.speaker-review-row {
+  display: grid;
+  gap: 8px;
+}
+
+.speaker-review-row span {
+  display: grid;
+  gap: 3px;
+}
+
+.speaker-review-row small {
+  color: #66736e;
+  line-height: 1.35;
+}
+
+.speaker-review-row input {
+  width: 100%;
+  border: 1px solid #cbd2cd;
+  background: #ffffff;
+  color: #24302b;
+  padding: 9px 10px;
+}
+
+.speaker-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

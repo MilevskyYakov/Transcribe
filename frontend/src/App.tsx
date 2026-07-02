@@ -44,6 +44,7 @@ import type {
   Job,
   JobEvent,
   ModelsPayload,
+  SpeakerReviewPayload,
   TranscriptSegment
 } from "./types";
 
@@ -95,6 +96,7 @@ export function App() {
   const [selectedModelName, setSelectedModelName] = useState(() => loadWebDefaultModel() ?? "large-v3");
   const [autosaveMarkdownDir, setAutosaveMarkdownDir] = useState(() => loadWebAutosaveMarkdownDir());
   const [finalMarkdownStatus, setFinalMarkdownStatus] = useState<FinalMarkdownStatus | null>(null);
+  const [speakerReview, setSpeakerReview] = useState<SpeakerReviewPayload | null>(null);
   const [isSavingFinalMarkdown, setIsSavingFinalMarkdown] = useState(false);
   const [isModelsOpen, setIsModelsOpen] = useState(false);
   const [batchPaths, setBatchPaths] = useState("");
@@ -254,6 +256,7 @@ export function App() {
       setArtifacts([]);
       setEvents([]);
       setFinalMarkdownStatus(null);
+      setSpeakerReview(null);
       return;
     }
     let isActive = true;
@@ -261,14 +264,16 @@ export function App() {
       client.getTranscript(selectedJobId),
       client.listArtifacts(selectedJobId),
       client.listEvents(selectedJobId),
-      client.finalMarkdownStatus(selectedJobId)
+      client.finalMarkdownStatus(selectedJobId),
+      client.speakerReview(selectedJobId)
     ])
-      .then(([transcript, nextArtifacts, nextEvents, nextFinalMarkdownStatus]) => {
+      .then(([transcript, nextArtifacts, nextEvents, nextFinalMarkdownStatus, nextSpeakerReview]) => {
         if (!isActive) return;
         setSegments(transcript.segments);
         setArtifacts(nextArtifacts);
         setEvents(nextEvents);
         setFinalMarkdownStatus(nextFinalMarkdownStatus);
+        setSpeakerReview(nextSpeakerReview);
       })
       .catch((error) => {
         if (isActive) setNotice(error instanceof Error ? error.message : "Задача недоступна");
@@ -280,6 +285,8 @@ export function App() {
 
   useEffect(() => {
     if (!selectedJob || displayStatus(selectedJob) !== "completed") return;
+    if (!speakerReview) return;
+    if (speakerReview?.status === "pending") return;
     if (finalMarkdownStatus?.status === "saved" || finalMarkdownStatus?.status === "missing") return;
     if (!autosaveMarkdownDir) {
       setNotice("Выберите папку для сохранения транскрипций");
@@ -287,7 +294,14 @@ export function App() {
     }
     if (isSavingFinalMarkdown) return;
     void saveSelectedFinalMarkdown(autosaveMarkdownDir);
-  }, [autosaveMarkdownDir, finalMarkdownStatus?.status, isSavingFinalMarkdown, selectedJob?.job_id, selectedJob?.status]);
+  }, [
+    autosaveMarkdownDir,
+    finalMarkdownStatus?.status,
+    isSavingFinalMarkdown,
+    selectedJob?.job_id,
+    selectedJob?.status,
+    speakerReview?.status
+  ]);
 
   function handleMediaFileChange(file: File | null) {
     setMediaFile(file);
@@ -474,6 +488,31 @@ export function App() {
     }
   }
 
+  async function saveSpeakerAssignments(assignments: Record<string, string>, skipped = false) {
+    if (!selectedJob) return;
+    if (!autosaveMarkdownDir) {
+      setNotice("Выберите папку для сохранения транскрипций");
+      return;
+    }
+    setIsSavingFinalMarkdown(true);
+    try {
+      const result = await client.saveSpeakerReview(selectedJob.job_id, assignments, {
+        skipped,
+        autosaveDir: autosaveMarkdownDir
+      });
+      setSpeakerReview(result.speaker_review);
+      if (result.final_markdown) setFinalMarkdownStatus(result.final_markdown);
+      const transcript = await client.getTranscript(selectedJob.job_id);
+      setSegments(transcript.segments);
+      await refresh();
+      setNotice(result.final_markdown?.message ?? "Имена спикеров сохранены");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Не удалось сохранить имена спикеров");
+    } finally {
+      setIsSavingFinalMarkdown(false);
+    }
+  }
+
   async function openFinalMarkdown() {
     const path = finalMarkdownStatus?.path ?? selectedJob?.metadata.saved_markdown_path ?? null;
     if (!path) return;
@@ -545,9 +584,12 @@ export function App() {
           selectedJobDisplayStatus={selectedJobDisplayStatus}
           selectedLastEventTime={selectedLastEventTime}
           selectedSpeakerTurns={selectedSpeakerTurns}
+          speakerReview={speakerReview}
           onChooseFinalMarkdownFolder={() => void chooseFinalMarkdownFolder()}
           onOpenFinalMarkdown={() => void openFinalMarkdown()}
           onSaveFinalMarkdownAgain={() => void saveSelectedFinalMarkdown()}
+          onSaveSpeakerAssignments={(assignments) => void saveSpeakerAssignments(assignments, false)}
+          onSkipSpeakerAssignments={(assignments) => void saveSpeakerAssignments(assignments, true)}
         />
       </section>
 

@@ -255,7 +255,7 @@ export function eventDisplayMessage(event: JobEvent, job: Job | null): string {
 export function speakerTurns(segments: TranscriptSegment[]): SpeakerTurn[] {
   const turns: SpeakerTurn[] = [];
   for (const segment of segments) {
-    const speakerLabel = segment.speaker_label?.trim() || "Спикер";
+    const speakerLabel = displaySpeakerLabel(segment.speaker_label);
     const text = (segment.text_clean || segment.text_raw).trim();
     const previous = turns[turns.length - 1];
     if (previous && previous.speakerLabel === speakerLabel) {
@@ -274,6 +274,14 @@ export function speakerTurns(segments: TranscriptSegment[]): SpeakerTurn[] {
     });
   }
   return turns;
+}
+
+export function displaySpeakerLabel(value: string | null | undefined): string {
+  const label = value?.trim();
+  if (!label) return "Спикер";
+  if (!label.startsWith("SPEAKER_")) return label;
+  const suffix = label.slice("SPEAKER_".length);
+  return /^\d+$/.test(suffix) ? `Спикер ${Number(suffix) + 1}` : "Спикер";
 }
 
 export function diarizationDiagnostic(job: Job | null): string | null {
