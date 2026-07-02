@@ -1,4 +1,4 @@
-import { Play, Upload } from "lucide-react";
+import { CheckCircle2, FileAudio, Play, Sparkles, Upload } from "lucide-react";
 import { useState } from "react";
 import type { DragEvent, FormEvent } from "react";
 
@@ -65,6 +65,10 @@ export function UploadPanel({
 }: UploadPanelProps) {
   const [isDragActive, setIsDragActive] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileLabel = mediaFile ? mediaFile.name : "Перетащите запись сюда";
+  const fileHelp = mediaFile
+    ? "Файл выбран, можно уточнить название и участников."
+    : "Аудио или видео: mp3, wav, m4a, mp4, mov и другие.";
 
   function selectMediaFile(file: File | null) {
     if (file && !isSupportedMediaFile(file)) {
@@ -111,23 +115,29 @@ export function UploadPanel({
 
   return (
     <form className="upload-hero" onSubmit={onSubmitJob}>
-      <div>
-        <p className="eyebrow">Новая запись</p>
-        <h2>Загрузить запись</h2>
-        <p>Выберите аудио или видео, добавьте участников при необходимости и запустите транскрибацию.</p>
+      <div className="upload-copy">
+        <p className="eyebrow accent">Новая запись</p>
+        <h2>Превратить запись в готовый текст</h2>
+        <p>Один главный шаг: добавьте файл, проверьте название и запустите транскрибацию.</p>
+        <div className="flow-steps" aria-label="Порядок работы">
+          <span className={mediaFile ? "complete" : "active"}>1. Файл</span>
+          <span>2. Спикеры</span>
+          <span>3. Markdown</span>
+        </div>
       </div>
       <label
         className={`hero-file-picker${isDragActive ? " is-drag-active" : ""}${
           uploadError ? " has-error" : ""
-        }`}
+        }${mediaFile ? " has-file" : ""}`}
         aria-describedby={uploadError ? "upload-file-error" : undefined}
         onDragEnter={handleDragEnter}
         onDragOver={handleDrag}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        <Upload size={28} />
-        <span>{isDragActive ? "Отпустите файл здесь" : mediaFile?.name ?? "Выбрать файл"}</span>
+        <span className="upload-icon-wrap">{mediaFile ? <FileAudio size={28} /> : <Upload size={28} />}</span>
+        <span>{isDragActive ? "Отпустите файл здесь" : fileLabel}</span>
+        <small>{isDragActive ? "Запись сразу попадёт в форму" : fileHelp}</small>
         <input
           type="file"
           accept={SUPPORTED_MEDIA_ACCEPT}
@@ -170,13 +180,16 @@ export function UploadPanel({
         />
       </label>
       <div className="upload-actions">
-        <span>
-          Модель: {selectedModelTitle}
-          {!selectedModelIsReady && ` · ${selectedModelStatusText}`}
+        <span className={`model-readiness ${selectedModelIsReady ? "ready" : "pending"}`}>
+          {selectedModelIsReady ? <CheckCircle2 size={16} /> : <Sparkles size={16} />}
+          <span>
+            Модель: {selectedModelTitle}
+            {!selectedModelIsReady && ` · ${selectedModelStatusText}`}
+          </span>
         </span>
         <button className="run-button" disabled={!canSubmitJob} type="submit">
           <Play size={17} />
-          <span>{isSubmitting ? "Запуск" : "Запустить"}</span>
+          <span>{isSubmitting ? "Запускаю…" : "Запустить транскрибацию"}</span>
         </button>
       </div>
     </form>

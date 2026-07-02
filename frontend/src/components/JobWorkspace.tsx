@@ -1,5 +1,15 @@
 import { useEffect, useState } from "react";
-import { Activity, AlertTriangle, Download, FileText, FolderOpen, ListChecks, Users } from "lucide-react";
+import {
+  Activity,
+  AlertTriangle,
+  CheckCircle2,
+  Download,
+  FileText,
+  FolderOpen,
+  ListChecks,
+  ShieldCheck,
+  Users
+} from "lucide-react";
 import type { ApiClient } from "../api";
 import { formatBytes, formatSeconds } from "../format";
 import type { Artifact, FinalMarkdownStatus, Job, JobEvent, SpeakerReviewPayload, TranscriptSegment, WordToken } from "../types";
@@ -82,10 +92,13 @@ export function JobWorkspace({
 
       {selectedJob && (
         <>
-          <section className="progress-panel">
+          <section className={`progress-panel ${selectedJobDisplayStatus ?? selectedJob.status}`}>
             <div className="progress-copy">
-              <strong>{currentMessage(selectedJob)}</strong>
-              <span>{currentProgressLabel(selectedJob)}</span>
+              <div>
+                <span className="progress-kicker">Сейчас</span>
+                <strong>{currentMessage(selectedJob)}</strong>
+              </div>
+              <span className="progress-percent">{currentProgressLabel(selectedJob)}</span>
             </div>
             <div className="progress-track" aria-label="Прогресс обработки">
               <div style={{ width: `${currentProgress(selectedJob)}%` }} />
@@ -141,8 +154,15 @@ export function JobWorkspace({
       {!selectedJob && (
         <section className="empty-workspace">
           <FileText size={26} />
-          <strong>Детали появятся после запуска</strong>
-          <p>Прогресс, транскрипт, диагностика и артефакты не занимают главный экран до первой задачи.</p>
+          <strong>Здесь появится готовая расшифровка</strong>
+          <p>Пока главный экран свободен: выберите запись выше и нажмите одну основную кнопку запуска.</p>
+          <div className="empty-flow-hint">
+            <span>Файл</span>
+            <span>→</span>
+            <span>Проверка спикеров</span>
+            <span>→</span>
+            <span>Готовый Markdown</span>
+          </div>
         </section>
       )}
     </>
@@ -290,7 +310,7 @@ function SpeakerReviewPanel({
 
 function ProcessPanel({ events, selectedJob }: { events: JobEvent[]; selectedJob: Job }) {
   return (
-    <section>
+    <section className="process-card">
       <div className="pane-title">
         <ListChecks size={18} />
         <h3>Процесс</h3>
@@ -329,10 +349,10 @@ function DiagnosticsPanel({
   selectedDisplayWarnings: string[];
 }) {
   return (
-    <section>
+    <section className="diagnostics-card">
       <div className="pane-title">
-        <AlertTriangle size={18} />
-        <h3>Диагностика</h3>
+        {selectedDisplayWarnings.length ? <AlertTriangle size={18} /> : <ShieldCheck size={18} />}
+        <h3>{selectedDisplayWarnings.length ? "Нужна проверка" : "Проверки"}</h3>
       </div>
       <div className="warnings">
         {selectedDisplayWarnings.length ? (
@@ -380,6 +400,8 @@ function FinalMarkdownPanel({
   const savedPath = finalMarkdownStatus?.path ?? selectedJob.metadata.saved_markdown_path ?? null;
   const filename = finalMarkdownStatus?.filename ?? selectedJob.metadata.saved_markdown_filename ?? null;
   const missing = finalMarkdownStatus?.missing ?? selectedJob.metadata.saved_markdown_missing ?? false;
+  const saved = Boolean(filename && !missing);
+  const panelTone = missing ? "missing" : saved ? "saved" : "pending";
   const message = missing
     ? "Файл транскрипции не найден"
     : finalMarkdownStatus?.message ??
@@ -387,10 +409,10 @@ function FinalMarkdownPanel({
       (autosaveMarkdownDir ? "Готовый Markdown будет сохранён автоматически" : "Выберите папку для сохранения транскрипций");
 
   return (
-    <section>
+    <section className={`final-markdown-card ${panelTone}`}>
       <div className="pane-title">
-        <FolderOpen size={18} />
-        <h3>Сохранение Markdown</h3>
+        {saved ? <CheckCircle2 size={18} /> : <FolderOpen size={18} />}
+        <h3>{saved ? "Готовый Markdown" : "Сохранение Markdown"}</h3>
       </div>
       <div className="autosave-panel">
         <p>{message}</p>
@@ -418,7 +440,7 @@ function FinalMarkdownPanel({
 
 function ArtifactsPanel({ artifacts, client }: { artifacts: Artifact[]; client: ApiClient }) {
   return (
-    <section>
+    <section className="artifacts-card">
       <div className="pane-title">
         <Download size={18} />
         <h3>Артефакты</h3>
