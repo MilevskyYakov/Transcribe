@@ -123,6 +123,24 @@ export function titleFromFilename(filename: string): string {
   return dotIndex > 0 ? basename.slice(0, dotIndex) : basename;
 }
 
+export function titleValidationMessage(title: string): string | null {
+  return title.trim() ? null : "Введите название транскрипции";
+}
+
+export function canSubmitTranscriptionJob(options: {
+  mediaFile: File | null;
+  transcriptionTitle: string;
+  isSubmitting: boolean;
+  selectedModelIsReady: boolean;
+}): boolean {
+  return (
+    Boolean(options.mediaFile) &&
+    !options.isSubmitting &&
+    options.selectedModelIsReady &&
+    titleValidationMessage(options.transcriptionTitle) === null
+  );
+}
+
 export function jobDisplayTitle(job: Job): string {
   const metadataTitle = job.metadata?.display_title ?? job.metadata?.title;
   if (typeof metadataTitle === "string" && metadataTitle.trim()) return metadataTitle.trim();
