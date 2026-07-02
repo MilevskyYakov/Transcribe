@@ -1,4 +1,4 @@
-import type { AppEnvironment } from "./types";
+import type { AppEnvironment, BackendLifecycle } from "./types";
 
 interface TauriBootstrapPayload {
   api_base_url: string;
@@ -10,6 +10,7 @@ interface TauriBootstrapPayload {
   ffprobe_available: boolean;
   ffmpeg_path?: string | null;
   ffprobe_path?: string | null;
+  backend_lifecycle?: BackendLifecycle | null;
 }
 
 export const DEFAULT_MODEL_STORAGE_KEY = "transcribe-doc-default-model";
@@ -45,15 +46,50 @@ export async function resolveAppEnvironment(defaultApiBase: string): Promise<App
       ffprobeAvailable: payload.ffprobe_available,
       ffmpegPath: payload.ffmpeg_path,
       ffprobePath: payload.ffprobe_path,
+      backendLifecycle: payload.backend_lifecycle ?? null,
       isTauri: true
     };
   } catch (error) {
     console.error("Tauri bootstrap failed", error);
     return {
       apiBaseUrl: defaultApiBase,
+      backendLifecycle: {
+        state: "error",
+        human_message: "Не удалось запустить",
+        technical_detail: error instanceof Error ? error.message : String(error),
+        last_check_at: null,
+        recent_output: []
+      },
       isTauri: true
     };
   }
+}
+
+export async function loadBackendStatus(isTauri: boolean): Promise<BackendLifecycle | null> {
+  if (!isTauri) return null;
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<BackendLifecycle>("backend_status");
+}
+
+export async function markBackendOnline(isTauri: boolean): Promise<BackendLifecycle | null> {
+  if (!isTauri) return null;
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<BackendLifecycle>("mark_backend_online");
+}
+
+export async function markBackendOffline(
+  isTauri: boolean,
+  detail: string
+): Promise<BackendLifecycle | null> {
+  if (!isTauri) return null;
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<BackendLifecycle>("mark_backend_offline", { detail });
+}
+
+export async function restartBackend(isTauri: boolean): Promise<BackendLifecycle | null> {
+  if (!isTauri) return null;
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<BackendLifecycle>("restart_backend");
 }
 
 export function loadWebDefaultModel(): string | null {

@@ -12,6 +12,8 @@ import {
   eventDisplayStatus,
   eventMessageForTest,
   artifactDisplayName,
+  backendLifecycleLabel,
+  backendLifecycleTone,
   compareArtifactsForDisplay,
   isRawRuntimeDetail,
   jobDisplayTitle,
@@ -27,6 +29,27 @@ function model(status: ModelStatus["status"], name = status): ModelStatus {
 }
 
 describe("job status presentation", () => {
+  it("maps backend lifecycle states to simple app labels and tones", () => {
+    expect(backendLifecycleLabel({ state: "starting", human_message: "", recent_output: [] })).toBe(
+      "Запускаем…"
+    );
+    expect(backendLifecycleLabel({ state: "checking", human_message: "", recent_output: [] })).toBe(
+      "Проверяем…"
+    );
+    expect(backendLifecycleLabel({ state: "online", human_message: "", recent_output: [] })).toBe(
+      "Готово"
+    );
+    expect(backendLifecycleLabel({ state: "error", human_message: "", recent_output: [] })).toBe(
+      "Не удалось запустить"
+    );
+    expect(backendLifecycleLabel({ state: "restarting", human_message: "", recent_output: [] })).toBe(
+      "Перезапускаем…"
+    );
+    expect(backendLifecycleTone({ state: "error", human_message: "", recent_output: [] })).toBe(
+      "error"
+    );
+  });
+
   it("keeps raw runtime errors out of the progress headline", () => {
     const job: Job = {
       job_id: "job-1",

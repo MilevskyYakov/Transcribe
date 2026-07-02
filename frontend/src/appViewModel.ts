@@ -1,5 +1,5 @@
 import { formatBytes } from "./format";
-import type { Artifact, Job, JobEvent, ModelStatus, TranscriptSegment } from "./types";
+import type { Artifact, BackendLifecycle, Job, JobEvent, ModelStatus, TranscriptSegment } from "./types";
 
 export interface SpeakerTurn {
   id: string;
@@ -42,6 +42,27 @@ const DIARIZATION_QUALITY_WARNING_PREFIX = "Diarization quality warning:";
 
 export function statusLabel(status: string): string {
   return STATUS_LABELS[status] ?? status;
+}
+
+export function backendLifecycleLabel(lifecycle: BackendLifecycle | null | undefined): string {
+  if (!lifecycle) return "Проверяем…";
+  const labels: Record<string, string> = {
+    starting: "Запускаем…",
+    checking: "Проверяем…",
+    online: "Готово",
+    offline: "Проверяем…",
+    error: "Не удалось запустить",
+    restarting: "Перезапускаем…"
+  };
+  return labels[lifecycle.state] ?? lifecycle.human_message ?? lifecycle.state;
+}
+
+export function backendLifecycleTone(lifecycle: BackendLifecycle | null | undefined): string {
+  if (!lifecycle) return "checking";
+  if (lifecycle.state === "online") return "ok";
+  if (lifecycle.state === "error") return "error";
+  if (lifecycle.state === "offline") return "warn";
+  return "checking";
 }
 
 export function isDiarizationQualityWarning(value: string): boolean {
