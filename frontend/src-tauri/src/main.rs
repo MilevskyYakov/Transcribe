@@ -22,6 +22,10 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::app_bootstrap,
+            commands::backend_status,
+            commands::mark_backend_offline,
+            commands::mark_backend_online,
+            commands::restart_backend,
             commands::set_default_model
         ])
         .run(tauri::generate_context!())

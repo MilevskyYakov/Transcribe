@@ -1,6 +1,14 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { ApiClient, normalizeBaseUrl } from "./api";
-import { loadWebDefaultModel, resolveAppEnvironment, saveDefaultModel } from "./appEnvironment";
+import {
+  loadBackendStatus,
+  loadWebDefaultModel,
+  markBackendOffline,
+  markBackendOnline,
+  resolveAppEnvironment,
+  restartBackend,
+  saveDefaultModel
+} from "./appEnvironment";
 import {
   canChooseModelAsDefault,
   canStartWithDefaultModel,
@@ -23,6 +31,7 @@ import { UploadPanel } from "./components/UploadPanel";
 import type {
   AppEnvironment,
   Artifact,
+  BackendLifecycle,
   HealthPayload,
   Job,
   JobEvent,
@@ -37,6 +46,8 @@ export {
   compareArtifactsForDisplay,
   currentMessage,
   currentProgressLabel,
+  backendLifecycleLabel,
+  backendLifecycleTone,
   defaultModelActionLabel,
   diarizationDiagnostic,
   displayStatus,
@@ -59,6 +70,8 @@ export function App() {
     () => localStorage.getItem("transcribe-doc-api-base") ?? DEFAULT_API_BASE
   );
   const [appEnvironment, setAppEnvironment] = useState<AppEnvironment | null>(null);
+  const [backendLifecycle, setBackendLifecycle] = useState<BackendLifecycle | null>(null);
+  const [, setBackendHealthFailures] = useState(0);
   const [health, setHealth] = useState<"unknown" | "ok" | "down">("unknown");
   const [healthDetails, setHealthDetails] = useState<HealthPayload | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -110,6 +123,9 @@ export function App() {
       const nextHealth = await client.health();
       setHealth("ok");
       setHealthDetails(nextHealth);
+      setBackendHealthFailures(0);
+      const onlineLifecycle = await markBackendOnline(isManagedApp);
+      if (onlineLifecycle) setBackendLifecycle(onlineLifecycle);
       const nextJobs = await client.listJobs();
       const nextModels = await client.listModels();
       setJobs(nextJobs);
@@ -124,15 +140,33 @@ export function App() {
     } catch (error) {
       setHealth("down");
       setHealthDetails(null);
-      setNotice(error instanceof Error ? error.message : "Сервис недоступен");
+      const message = error instanceof Error ? error.message : "Сервис недоступен";
+      const offlineLifecycle = await markBackendOffline(isManagedApp, message);
+      if (offlineLifecycle) {
+        setBackendLifecycle(offlineLifecycle);
+        setBackendHealthFailures((current) => {
+          const next = current + 1;
+          if (isManagedApp && next >= 3) {
+            setBackendLifecycle({
+              ...offlineLifecycle,
+              state: "error",
+              human_message: "Не удалось запустить",
+              technical_detail: message
+            });
+          }
+          return next;
+        });
+      }
+      setNotice(message);
     }
-  }, [client]);
+  }, [client, isManagedApp]);
 
   useEffect(() => {
     let isActive = true;
     void resolveAppEnvironment(DEFAULT_API_BASE).then((environment) => {
       if (!isActive) return;
       setAppEnvironment(environment);
+      setBackendLifecycle(environment.backendLifecycle ?? null);
       if (environment.isTauri) {
         setApiBase(environment.apiBaseUrl);
         if (environment.defaultModelName) {
@@ -156,10 +190,37 @@ export function App() {
   }, [refresh]);
 
   useEffect(() => {
+    if (!isManagedApp) return;
+    const timer = window.setInterval(() => {
+      void loadBackendStatus(true)
+        .then((status) => {
+          if (status) {
+            setBackendLifecycle((current) =>
+              current?.state === "error" && status.state !== "online" && status.state !== "restarting"
+                ? current
+                : status
+            );
+          }
+        })
+        .catch(() => undefined);
+    }, 2500);
+    return () => window.clearInterval(timer);
+  }, [isManagedApp]);
+
+  useEffect(() => {
     if (!hasActiveJobs && !hasModelDownload) return;
     const timer = window.setInterval(() => void refresh(), 2500);
     return () => window.clearInterval(timer);
   }, [hasActiveJobs, hasModelDownload, refresh]);
+
+  useEffect(() => {
+    if (!isManagedApp) return;
+    if (!["starting", "checking", "offline", "restarting"].includes(backendLifecycle?.state ?? "")) {
+      return;
+    }
+    const timer = window.setInterval(() => void refresh(), 2500);
+    return () => window.clearInterval(timer);
+  }, [backendLifecycle?.state, isManagedApp, refresh]);
 
   useEffect(() => {
     if (!hasActiveJobs) return;
@@ -290,6 +351,22 @@ export function App() {
     }
   }
 
+  async function retryBackendStart() {
+    setNotice(null);
+    setBackendHealthFailures(0);
+    const restarting = await restartBackend(isManagedApp);
+    if (restarting) {
+      setBackendLifecycle(restarting);
+      const environment = await resolveAppEnvironment(DEFAULT_API_BASE);
+      setAppEnvironment(environment);
+      setBackendLifecycle(environment.backendLifecycle ?? restarting);
+      setApiBase(environment.apiBaseUrl);
+      await refresh();
+      return;
+    }
+    await refresh();
+  }
+
   async function chooseDefaultModel(modelName: string) {
     const model = models?.models.find((item) => item.name === modelName) ?? null;
     if (!canChooseModelAsDefault(model)) {
@@ -315,6 +392,7 @@ export function App() {
         ffmpegAvailable={ffmpegAvailable}
         ffprobeAvailable={ffprobeAvailable}
         health={health}
+        backendLifecycle={backendLifecycle}
         isManagedApp={isManagedApp}
         isSubmitting={isSubmitting}
         jobs={jobs}
@@ -326,6 +404,7 @@ export function App() {
         onBatchPathsChange={setBatchPaths}
         onModelsOpen={() => setIsModelsOpen(true)}
         onRefresh={() => void refresh()}
+        onRetryBackendStart={() => void retryBackendStart()}
         onSelectJob={setSelectedJobId}
         onSubmitBatch={() => void submitBatch()}
         onSubmitWatchScan={() => void submitWatchScan()}

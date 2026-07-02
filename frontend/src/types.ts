@@ -141,6 +141,7 @@ export interface HealthPayload {
 
 export interface AppEnvironment {
   apiBaseUrl: string;
+  backendLifecycle?: BackendLifecycle | null;
   defaultModelName?: string | null;
   appDataDir?: string | null;
   cacheDir?: string | null;
@@ -150,4 +151,21 @@ export interface AppEnvironment {
   ffmpegPath?: string | null;
   ffprobePath?: string | null;
   isTauri: boolean;
+}
+
+export type BackendLifecycleState =
+  | "starting"
+  | "checking"
+  | "online"
+  | "offline"
+  | "error"
+  | "restarting"
+  | string;
+
+export interface BackendLifecycle {
+  state: BackendLifecycleState;
+  human_message: string;
+  technical_detail?: string | null;
+  last_check_at?: string | null;
+  recent_output: string[];
 }

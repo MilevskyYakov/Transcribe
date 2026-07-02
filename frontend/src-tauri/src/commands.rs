@@ -1,5 +1,5 @@
 use crate::{
-    backend::{binary_path, AppBootstrap, BackendState},
+    backend::{binary_path, AppBootstrap, BackendLifecycleSnapshot, BackendState},
     settings::{save_settings, AppSettings},
 };
 
@@ -13,7 +13,7 @@ pub(crate) fn app_bootstrap(state: tauri::State<'_, BackendState>) -> AppBootstr
         .map(|value| value.clone())
         .unwrap_or_else(|_| AppSettings::default().default_model_name);
     AppBootstrap {
-        api_base_url: state.api_base_url.clone(),
+        api_base_url: state.api_base_url(),
         app_data_dir: state.app_data_dir.display().to_string(),
         cache_dir: state.cache_dir.display().to_string(),
         output_dir: state.output_dir.display().to_string(),
@@ -22,7 +22,38 @@ pub(crate) fn app_bootstrap(state: tauri::State<'_, BackendState>) -> AppBootstr
         ffmpeg_path: ffmpeg_path.map(|path| path.display().to_string()),
         ffprobe_path: ffprobe_path.map(|path| path.display().to_string()),
         default_model_name,
+        backend_lifecycle: state.lifecycle(),
     }
+}
+
+#[tauri::command]
+pub(crate) fn backend_status(state: tauri::State<'_, BackendState>) -> BackendLifecycleSnapshot {
+    state.lifecycle()
+}
+
+#[tauri::command]
+pub(crate) fn mark_backend_online(
+    state: tauri::State<'_, BackendState>,
+) -> BackendLifecycleSnapshot {
+    state.mark_online();
+    state.lifecycle()
+}
+
+#[tauri::command]
+pub(crate) fn mark_backend_offline(
+    detail: String,
+    state: tauri::State<'_, BackendState>,
+) -> BackendLifecycleSnapshot {
+    state.mark_offline(detail);
+    state.lifecycle()
+}
+
+#[tauri::command]
+pub(crate) fn restart_backend<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, BackendState>,
+) -> BackendLifecycleSnapshot {
+    state.restart(&app)
 }
 
 #[tauri::command]

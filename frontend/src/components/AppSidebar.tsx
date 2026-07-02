@@ -1,9 +1,17 @@
 import { FileText, RefreshCw, Server, Settings, SlidersHorizontal } from "lucide-react";
-import type { Job } from "../types";
-import { displayStatus, jobDisplayTitle, languageLabel, statusLabel } from "../appViewModel";
+import type { BackendLifecycle, Job } from "../types";
+import {
+  backendLifecycleLabel,
+  backendLifecycleTone,
+  displayStatus,
+  jobDisplayTitle,
+  languageLabel,
+  statusLabel
+} from "../appViewModel";
 
 interface AppSidebarProps {
   apiBase: string;
+  backendLifecycle: BackendLifecycle | null;
   batchPaths: string;
   cacheDir: string | null;
   ffmpegAvailable: boolean;
@@ -20,6 +28,7 @@ interface AppSidebarProps {
   onBatchPathsChange: (value: string) => void;
   onModelsOpen: () => void;
   onRefresh: () => void;
+  onRetryBackendStart: () => void;
   onSelectJob: (jobId: string) => void;
   onSubmitBatch: () => void;
   onSubmitWatchScan: () => void;
@@ -28,6 +37,7 @@ interface AppSidebarProps {
 
 export function AppSidebar({
   apiBase,
+  backendLifecycle,
   batchPaths,
   cacheDir,
   ffmpegAvailable,
@@ -44,11 +54,22 @@ export function AppSidebar({
   onBatchPathsChange,
   onModelsOpen,
   onRefresh,
+  onRetryBackendStart,
   onSelectJob,
   onSubmitBatch,
   onSubmitWatchScan,
   onWatchFolderChange
 }: AppSidebarProps) {
+  const lifecycleTone = backendLifecycleTone(backendLifecycle);
+  const lifecycleLabel = backendLifecycleLabel(backendLifecycle);
+  const technicalDetails = [
+    `state: ${backendLifecycle?.state ?? health}`,
+    `api: ${apiBase}`,
+    backendLifecycle?.last_check_at ? `last_check_at: ${backendLifecycle.last_check_at}` : null,
+    backendLifecycle?.technical_detail ? `detail: ${backendLifecycle.technical_detail}` : null,
+    ...(backendLifecycle?.recent_output ?? [])
+  ].filter(Boolean);
+
   return (
     <aside className="job-rail">
       <div className="brand-block">
@@ -60,10 +81,15 @@ export function AppSidebar({
       </div>
 
       <section className="app-status-panel" aria-label="Статус приложения">
-        <div className="status-tile">
+        <div className={`status-tile ${lifecycleTone}`}>
           <Server size={16} />
           <span>Backend</span>
-          <strong>{health === "ok" ? "online" : health === "down" ? "offline" : "checking"}</strong>
+          <strong>{lifecycleLabel}</strong>
+          {backendLifecycle?.state === "error" && (
+            <button className="inline-status-action" type="button" onClick={onRetryBackendStart}>
+              Повторить запуск
+            </button>
+          )}
         </div>
         <div className={ffmpegAvailable && ffprobeAvailable ? "status-tile ok" : "status-tile warn"}>
           <Settings size={16} />
@@ -84,9 +110,14 @@ export function AppSidebar({
       </section>
 
       <details className="connection-details">
-        <summary>Диагностика</summary>
+        <summary>Показать диагностику</summary>
+        <p className="diagnostic-summary">
+          {backendLifecycle?.state === "error"
+            ? backendLifecycle.technical_detail || "Backend не запустился. Попробуйте повторить запуск."
+            : backendLifecycle?.human_message || lifecycleLabel}
+        </p>
         <div className="status-row compact">
-          <span className={`service-dot ${health}`} />
+          <span className={`service-dot ${lifecycleTone}`} />
           <input
             aria-label="Адрес локального API"
             value={apiBase}
@@ -97,6 +128,7 @@ export function AppSidebar({
             <RefreshCw size={16} />
           </button>
         </div>
+        <pre className="backend-diagnostics">{technicalDetails.join("\n")}</pre>
         <dl>
           <dt>Data</dt>
           <dd>{outputDir ?? "local output"}</dd>
