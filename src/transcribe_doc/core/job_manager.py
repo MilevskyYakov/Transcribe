@@ -10,6 +10,7 @@ from uuid import uuid4
 from transcribe_doc.app.config import AppConfig
 from transcribe_doc.app.models import ArtifactManifest, Job, JobStatus
 from transcribe_doc.storage.artifact_store import save_config_snapshot, save_job
+from transcribe_doc.storage.filenames import safe_markdown_filename
 from transcribe_doc.storage.paths import JobPaths, build_job_paths
 
 
@@ -25,7 +26,11 @@ def create_job(
     resolved_source = Path(source_path).expanduser().resolve()
     source_filename = resolved_source.name
     title = _resolve_display_title(resolved_source, display_title)
-    job_paths = build_job_paths(output_root, resolved_job_id)
+    job_paths = build_job_paths(
+        output_root,
+        resolved_job_id,
+        final_speech_text_filename=safe_markdown_filename(title, source_path=resolved_source),
+    )
     job_paths.log_file.touch(exist_ok=True)
     save_config_snapshot(config, job_paths.config_snapshot)
 

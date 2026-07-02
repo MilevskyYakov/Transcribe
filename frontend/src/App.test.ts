@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   canChooseModelAsDefault,
+  canSubmitTranscriptionJob,
   canStartWithDefaultModel,
   currentMessage,
   currentProgressLabel,
@@ -19,6 +20,7 @@ import {
   jobDisplayTitle,
   modelDownloadActionLabel,
   speakerTurns,
+  titleValidationMessage,
   titleFromFilename,
   selectedJobDetailsRefreshKey
 } from "./App";
@@ -123,6 +125,30 @@ describe("job titles", () => {
       "raw-talk"
     );
     expect(jobDisplayTitle({ ...baseJob, source_paths: [], metadata: {} })).toBe("job-1");
+  });
+
+  it("requires a non-empty title before starting a transcription", () => {
+    const mediaFile = new File(["audio"], "Client Call.mov");
+
+    expect(titleFromFilename(mediaFile.name)).toBe("Client Call");
+    expect(titleValidationMessage("   ")).toBe("Введите название транскрипции");
+    expect(titleValidationMessage("Client Call")).toBeNull();
+    expect(
+      canSubmitTranscriptionJob({
+        mediaFile,
+        transcriptionTitle: "Client Call",
+        isSubmitting: false,
+        selectedModelIsReady: true
+      })
+    ).toBe(true);
+    expect(
+      canSubmitTranscriptionJob({
+        mediaFile,
+        transcriptionTitle: "   ",
+        isSubmitting: false,
+        selectedModelIsReady: true
+      })
+    ).toBe(false);
   });
 });
 

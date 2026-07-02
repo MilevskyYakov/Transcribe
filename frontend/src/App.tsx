@@ -11,6 +11,7 @@ import {
 } from "./appEnvironment";
 import {
   canChooseModelAsDefault,
+  canSubmitTranscriptionJob,
   canStartWithDefaultModel,
   DEFAULT_API_BASE,
   diarizationDiagnostic,
@@ -22,6 +23,7 @@ import {
   modelLabel,
   selectedJobDetailsRefreshKey,
   speakerTurns,
+  titleValidationMessage,
   titleFromFilename
 } from "./appViewModel";
 import { AppSidebar } from "./components/AppSidebar";
@@ -42,6 +44,7 @@ import type {
 export {
   artifactDisplayName,
   canChooseModelAsDefault,
+  canSubmitTranscriptionJob,
   canStartWithDefaultModel,
   compareArtifactsForDisplay,
   currentMessage,
@@ -61,6 +64,7 @@ export {
   modelDownloadActionLabel,
   selectedJobDetailsRefreshKey,
   speakerTurns,
+  titleValidationMessage,
   titleFromFilename,
   type SpeakerTurn
 } from "./appViewModel";
@@ -113,7 +117,13 @@ export function App() {
   const selectedModelTitle = selectedModel?.label ?? selectedModel?.name ?? selectedModelName;
   const selectedModelIsReady = canStartWithDefaultModel(selectedModel);
   const selectedModelStatusText = selectedModel ? modelLabel(selectedModel) : "проверяю модели";
-  const canSubmitJob = Boolean(mediaFile) && !isSubmitting && selectedModelIsReady;
+  const transcriptionTitleError = mediaFile ? titleValidationMessage(transcriptionTitle) : null;
+  const canSubmitJob = canSubmitTranscriptionJob({
+    mediaFile,
+    transcriptionTitle,
+    isSubmitting,
+    selectedModelIsReady
+  });
   const selectedJobRefreshKey = selectedJobDetailsRefreshKey(selectedJob);
   const selectedSpeakerTurns = useMemo(() => speakerTurns(segments), [segments]);
   const selectedDiarizationDiagnostic = diarizationDiagnostic(selectedJob);
@@ -263,6 +273,10 @@ export function App() {
   async function submitJob(event: FormEvent) {
     event.preventDefault();
     if (!mediaFile) return;
+    if (transcriptionTitleError) {
+      setNotice(transcriptionTitleError);
+      return;
+    }
     if (!selectedModelIsReady) {
       setNotice("Выберите готовую модель распознавания или скачайте текущую модель.");
       setIsModelsOpen(true);
@@ -420,6 +434,7 @@ export function App() {
           selectedModelStatusText={selectedModelStatusText}
           selectedModelTitle={selectedModelTitle}
           speakerHint={speakerHint}
+          titleError={transcriptionTitleError}
           transcriptionTitle={transcriptionTitle}
           onMediaFileChange={handleMediaFileChange}
           onSpeakerHintChange={setSpeakerHint}

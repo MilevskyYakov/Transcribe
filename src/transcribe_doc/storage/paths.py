@@ -32,7 +32,12 @@ class JobPaths:
     log_file: Path
 
 
-def build_job_paths(output_root: Path | str, job_id: str) -> JobPaths:
+def build_job_paths(
+    output_root: Path | str,
+    job_id: str,
+    *,
+    final_speech_text_filename: str = "final_speech_text.md",
+) -> JobPaths:
     """Create and return the canonical directory layout for a job."""
     root = Path(output_root)
     job_dir = root / job_id
@@ -48,7 +53,7 @@ def build_job_paths(output_root: Path | str, job_id: str) -> JobPaths:
         words_json=job_dir / "words.json",
         transcript_clean_txt=job_dir / "transcript_clean.txt",
         transcript_clean_md=job_dir / "transcript_clean.md",
-        final_speech_text_md=job_dir / "final_speech_text.md",
+        final_speech_text_md=job_dir / final_speech_text_filename,
         transcript_clean_docx=job_dir / "transcript_clean.docx",
         transcript_clean_pdf=job_dir / "transcript_clean.pdf",
         subtitles_srt=job_dir / "subtitles.srt",

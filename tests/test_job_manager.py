@@ -4,6 +4,7 @@ from pathlib import Path
 from transcribe_doc.app.config import load_config
 from transcribe_doc.app.models import JobStatus
 from transcribe_doc.core.job_manager import create_job
+from transcribe_doc.storage.filenames import safe_markdown_filename
 
 
 def test_create_job_initializes_workspace_and_snapshot(tmp_path: Path) -> None:
@@ -25,6 +26,7 @@ def test_create_job_initializes_workspace_and_snapshot(tmp_path: Path) -> None:
     assert job_paths.artifacts_dir.exists()
     assert job_paths.config_snapshot.exists()
     assert job_paths.diarization_dump.name == "diarization_dump.json"
+    assert job_paths.final_speech_text_md.name == "sample.md"
 
     snapshot = json.loads(job_paths.config_snapshot.read_text(encoding="utf-8"))
     assert snapshot["app"]["output_dir"] == "./output"
@@ -39,7 +41,7 @@ def test_create_job_preserves_manual_display_title(tmp_path: Path) -> None:
     source_file = tmp_path / "raw-meeting.wav"
     source_file.write_bytes(b"fake-audio")
 
-    job, _ = create_job(
+    job, job_paths = create_job(
         source_path=source_file,
         output_root=tmp_path / "output",
         config=config,
@@ -48,3 +50,19 @@ def test_create_job_preserves_manual_display_title(tmp_path: Path) -> None:
 
     assert job.metadata["display_title"] == "Созвон с клиентом"
     assert job.metadata["source_filename"] == "raw-meeting.wav"
+    assert job_paths.final_speech_text_md.name == "Созвон с клиентом.md"
+
+
+def test_safe_markdown_filename_sanitizes_title_and_fallbacks(tmp_path: Path) -> None:
+    assert (
+        safe_markdown_filename(" Client/Call: Q&A?\nnext  step ", source_path=tmp_path / "raw.mov")
+        == "Client Call Q&A next step.md"
+    )
+    assert safe_markdown_filename(" /// ", source_path=tmp_path / "Source: Call.mov") == "Source Call.md"
+    assert safe_markdown_filename(" ??? ") == "transcription.md"
+
+    long_title = "A" * 140
+    filename = safe_markdown_filename(long_title)
+
+    assert filename == f"{'A' * 120}.md"
+    assert len(filename.removesuffix(".md")) == 120

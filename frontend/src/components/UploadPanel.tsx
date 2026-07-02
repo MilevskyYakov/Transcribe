@@ -40,6 +40,7 @@ interface UploadPanelProps {
   selectedModelStatusText: string;
   selectedModelTitle: string;
   speakerHint: string;
+  titleError: string | null;
   transcriptionTitle: string;
   onMediaFileChange: (file: File | null) => void;
   onSpeakerHintChange: (value: string) => void;
@@ -55,6 +56,7 @@ export function UploadPanel({
   selectedModelStatusText,
   selectedModelTitle,
   speakerHint,
+  titleError,
   transcriptionTitle,
   onMediaFileChange,
   onSpeakerHintChange,
@@ -143,11 +145,19 @@ export function UploadPanel({
         <span>Название транскрибации</span>
         <input
           aria-label="Название транскрибации"
+          aria-invalid={titleError ? "true" : "false"}
+          aria-describedby={titleError ? "transcription-title-error" : undefined}
+          required
           type="text"
           placeholder="Например: Созвон с клиентом"
           value={transcriptionTitle}
           onChange={(event) => onTranscriptionTitleChange(event.target.value)}
         />
+        {titleError && (
+          <span id="transcription-title-error" role="alert">
+            {titleError}
+          </span>
+        )}
       </label>
       <label className="speaker-input">
         <span>Участники</span>
