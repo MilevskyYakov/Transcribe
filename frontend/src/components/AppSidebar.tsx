@@ -30,6 +30,7 @@ interface AppSidebarProps {
   onRefresh: () => void;
   onRetryBackendStart: () => void;
   onSelectJob: (jobId: string) => void;
+  onCleanupTemp: () => void;
   onSubmitBatch: () => void;
   onSubmitWatchScan: () => void;
   onWatchFolderChange: (value: string) => void;
@@ -56,6 +57,7 @@ export function AppSidebar({
   onRefresh,
   onRetryBackendStart,
   onSelectJob,
+  onCleanupTemp,
   onSubmitBatch,
   onSubmitWatchScan,
   onWatchFolderChange
@@ -171,6 +173,14 @@ export function AppSidebar({
             onClick={onSubmitWatchScan}
           >
             Проверить папку
+          </button>
+          <button
+            className="secondary-action"
+            disabled={isSubmitting}
+            type="button"
+            onClick={onCleanupTemp}
+          >
+            Очистить временные файлы
           </button>
         </section>
       </details>

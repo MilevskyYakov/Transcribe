@@ -6,6 +6,7 @@ import type {
   JobEvent,
   ModelsPayload,
   SpeakerReviewPayload,
+  TempCleanupReport,
   TranscriptSegment,
   WordToken
 } from "./types";
@@ -100,6 +101,15 @@ export class ApiClient {
 
   async downloadAllModels(): Promise<{ status: string; message: string; started: string[]; skipped: string[] }> {
     const response = await fetch(`${this.baseUrl}/models/download-all`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({})
+    });
+    return this.parseResponse(response);
+  }
+
+  async cleanupTemporaryFiles(): Promise<TempCleanupReport> {
+    const response = await fetch(`${this.baseUrl}/cleanup/temp`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({})

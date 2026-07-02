@@ -34,6 +34,7 @@ import { AppSidebar } from "./components/AppSidebar";
 import { JobWorkspace } from "./components/JobWorkspace";
 import { ModelsModal } from "./components/ModelsModal";
 import { UploadPanel } from "./components/UploadPanel";
+import { formatBytes } from "./format";
 import type {
   AppEnvironment,
   Artifact,
@@ -382,6 +383,21 @@ export function App() {
     }
   }
 
+  async function cleanupTemporaryFiles() {
+    setIsSubmitting(true);
+    try {
+      const result = await client.cleanupTemporaryFiles();
+      await refresh();
+      setNotice(
+        `Временные файлы очищены: ${result.removed_count}, освобождено ${formatBytes(result.freed_bytes)}`
+      );
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Не удалось очистить временные файлы");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   async function startModelDownload(modelName: string) {
     try {
       const result = await client.downloadModel(modelName);
@@ -530,6 +546,7 @@ export function App() {
         onRefresh={() => void refresh()}
         onRetryBackendStart={() => void retryBackendStart()}
         onSelectJob={setSelectedJobId}
+        onCleanupTemp={() => void cleanupTemporaryFiles()}
         onSubmitBatch={() => void submitBatch()}
         onSubmitWatchScan={() => void submitWatchScan()}
         onWatchFolderChange={setWatchFolder}

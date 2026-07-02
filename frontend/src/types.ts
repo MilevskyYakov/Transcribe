@@ -105,6 +105,13 @@ export interface FinalMarkdownStatus {
   missing?: boolean;
 }
 
+export interface TempCleanupReport {
+  removed_files: string[];
+  removed_count: number;
+  freed_bytes: number;
+  errors: string[];
+}
+
 export interface SpeakerReviewGroup {
   machine_label: string;
   fallback_label: string;

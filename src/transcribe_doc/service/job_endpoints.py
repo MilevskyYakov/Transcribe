@@ -47,10 +47,22 @@ from transcribe_doc.storage.speaker_review import (
     build_speaker_review_payload,
     update_speaker_assignments,
 )
+from transcribe_doc.storage.temp_cleanup import (
+    cleanup_stale_temporary_media,
+    cleanup_successful_job_media,
+)
 
 
 def list_jobs_endpoint(ctx: Any) -> ApiResponse:
     return json_response({"jobs": list_jobs(ctx.output_root)})
+
+
+def cleanup_temp_endpoint(ctx: Any) -> ApiResponse:
+    report = cleanup_stale_temporary_media(
+        output_root=ctx.output_root,
+        temp_root=Path(ctx.app_config.app.temp_dir),
+    )
+    return json_response(report.to_payload())
 
 
 def get_job_endpoint(ctx: Any, job_id: str) -> ApiResponse:
@@ -112,6 +124,13 @@ def update_speaker_review_endpoint(ctx: Any, job_id: str) -> ApiResponse:
         if isinstance(autosave_dir, str) and autosave_dir.strip():
             status = save_final_markdown(job, ctx.output_root, autosave_dir)
             sync_saved_markdown_metadata(job, status)
+            cleanup_report = cleanup_successful_job_media(
+                job,
+                output_root=ctx.output_root,
+                job_id=job_id,
+                temp_root=Path(ctx.app_config.app.temp_dir),
+            )
+            job["metadata"]["saved_markdown_cleanup"] = cleanup_report.to_payload()
             final_markdown = status.to_payload()
         write_job_payload(ctx.output_root / job_id / "job.json", job)
     except FileNotFoundError as error:
@@ -169,6 +188,13 @@ def save_final_markdown_endpoint(ctx: Any, job_id: str) -> ApiResponse:
             raise ValueError("Выберите папку для сохранения транскрипций")
         status = save_final_markdown(job, ctx.output_root, autosave_dir)
         sync_saved_markdown_metadata(job, status)
+        cleanup_report = cleanup_successful_job_media(
+            job,
+            output_root=ctx.output_root,
+            job_id=job_id,
+            temp_root=Path(ctx.app_config.app.temp_dir),
+        )
+        job["metadata"]["saved_markdown_cleanup"] = cleanup_report.to_payload()
         write_job_payload(ctx.output_root / job_id / "job.json", job)
     except FileNotFoundError as error:
         return json_response({"error": str(error)}, HTTPStatus.NOT_FOUND)

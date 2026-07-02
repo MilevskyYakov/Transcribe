@@ -186,6 +186,7 @@ def test_transcript_artifacts_events_endpoints_use_contract_payloads(tmp_path: P
 
 def test_speaker_review_endpoint_persists_assignment_and_saves_markdown(tmp_path: Path) -> None:
     output_root = tmp_path / "output"
+    temp_root = tmp_path / "tmp"
     job_dir = output_root / "job-local"
     job_dir.mkdir(parents=True)
     (job_dir / "segments.json").write_text(
@@ -209,6 +210,7 @@ def test_speaker_review_endpoint_persists_assignment_and_saves_markdown(tmp_path
     )
     autosave_dir = tmp_path / "saved"
     ctx = SimpleNamespace(
+        app_config=AppConfig(app=AppSection(output_dir=str(output_root), temp_dir=str(temp_root))),
         output_root=output_root,
         read_json_object=lambda: {
             "assignments": {"SPEAKER_00": "Яков"},
@@ -235,10 +237,18 @@ def test_final_markdown_endpoint_saves_external_file_and_uses_title_download_nam
     tmp_path: Path,
 ) -> None:
     output_root = tmp_path / "output"
+    temp_root = tmp_path / "tmp"
     job_dir = output_root / "job-local"
-    job_dir.mkdir(parents=True)
+    artifacts_dir = job_dir / "artifacts"
+    uploads_dir = temp_root / "uploads"
+    artifacts_dir.mkdir(parents=True)
+    uploads_dir.mkdir(parents=True)
     segments_path = job_dir / "segments.json"
     final_text_path = job_dir / "final_speech_text.md"
+    uploaded_source_path = uploads_dir / "source.wav"
+    normalized_audio_path = artifacts_dir / "normalized_audio.wav"
+    uploaded_source_path.write_bytes(b"uploaded-media")
+    normalized_audio_path.write_bytes(b"normalized-media")
     segments_path.write_text(
         '[{"segment_id":"s1","start_seconds":0,"end_seconds":1,"text_raw":"Hi","text_clean":"Hi"}]',
         encoding="utf-8",
@@ -247,15 +257,19 @@ def test_final_markdown_endpoint_saves_external_file_and_uses_title_download_nam
     save_job(
         Job(
             job_id="job-local",
-            source_paths=["sample.wav"],
+            source_paths=[str(uploaded_source_path), str(tmp_path / "original.wav")],
             status=JobStatus.COMPLETED,
-            artifacts=ArtifactManifest(final_speech_text_md=str(final_text_path)),
+            artifacts=ArtifactManifest(
+                final_speech_text_md=str(final_text_path),
+                normalized_audio=str(normalized_audio_path),
+            ),
             metadata={"display_title": "Client call"},
         ),
         job_dir / "job.json",
     )
     autosave_dir = tmp_path / "saved"
     ctx = SimpleNamespace(
+        app_config=AppConfig(app=AppSection(output_dir=str(output_root), temp_dir=str(temp_root))),
         output_root=output_root,
         read_json_object=lambda: {"autosave_dir": str(autosave_dir)},
     )
@@ -266,6 +280,8 @@ def test_final_markdown_endpoint_saves_external_file_and_uses_title_download_nam
 
     assert saved.payload["message"] == "Сохранено: Client call.md"
     assert (autosave_dir / "Client call.md").exists()
+    assert not uploaded_source_path.exists()
+    assert not normalized_audio_path.exists()
     assert status.payload["status"] == "saved"
     assert download.download_name == "Client call.md"
 
