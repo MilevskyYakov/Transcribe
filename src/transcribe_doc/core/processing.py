@@ -254,6 +254,7 @@ def export_stage(context: ProcessingContext) -> None:
     export_all(
         transcription_result.segments,
         _selected_export_paths(context.config, context.job_paths, context.formats),
+        title=str(context.job.metadata.get("display_title") or ""),
     )
 
 

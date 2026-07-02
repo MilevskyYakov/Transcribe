@@ -19,7 +19,9 @@ def test_save_final_markdown_writes_renames_and_detects_missing(tmp_path: Path) 
     job_dir = output_root / 'job-1'
     job_dir.mkdir(parents=True)
     (job_dir / 'segments.json').write_text(
-        '[{"segment_id":"s1","start_seconds":0,"end_seconds":1,"text_raw":"Привет","text_clean":"Привет","speaker_label":"Яков"}]',
+        '[{"segment_id":"s1","start_seconds":0,"end_seconds":1,"text_raw":"Привет",'
+        '"text_clean":"Привет","speaker_label":"SPEAKER_00",'
+        '"mapping":{"machine_label":"SPEAKER_00","display_label":"Яков","confidence":1.0}}]',
         encoding='utf-8',
     )
     job = {
@@ -35,7 +37,10 @@ def test_save_final_markdown_writes_renames_and_detects_missing(tmp_path: Path) 
     first_path = autosave_dir / 'Первое название.md'
     assert first_path.exists()
     assert status.message == 'Сохранено: Первое название.md'
-    assert '**Яков**' in first_path.read_text(encoding='utf-8')
+    first_content = first_path.read_text(encoding='utf-8')
+    assert first_content.startswith('# Первое название\n\n## Транскрипция')
+    assert '[00:00:00–00:00:01] Яков: Привет' in first_content
+    assert 'SPEAKER_00' not in first_content
 
     job['metadata']['display_title'] = 'Новое название'
     status = save_final_markdown(job, output_root, autosave_dir)

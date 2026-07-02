@@ -2,8 +2,8 @@ import json
 import zipfile
 from pathlib import Path
 
-from transcribe_doc.app.models import TranscriptSegment, WordToken
-from transcribe_doc.export.writers import export_all, write_srt
+from transcribe_doc.app.models import SpeakerMapping, TranscriptSegment, WordToken
+from transcribe_doc.export.writers import export_all, write_final_text_md, write_srt
 from transcribe_doc.summary.extractive import write_summary
 
 
@@ -28,11 +28,11 @@ def test_export_all_writes_user_formats(tmp_path: Path) -> None:
         "pdf": tmp_path / "transcript_clean.pdf",
     }
 
-    written = export_all(segments, paths)
+    written = export_all(segments, paths, title="Созвон с клиентом")
 
     assert set(written) == set(paths.values())
     assert "Алексей" in paths["txt"].read_text(encoding="utf-8")
-    assert "# Готовый текст" in paths["final_text_md"].read_text(encoding="utf-8")
+    assert "# Созвон с клиентом" in paths["final_text_md"].read_text(encoding="utf-8")
     assert paths["pdf"].read_bytes().startswith(b"%PDF-1.4")
     assert json.loads(paths["json"].read_text(encoding="utf-8"))[0]["segment_id"] == "seg-0000"
     with zipfile.ZipFile(paths["docx"]) as archive:
@@ -90,6 +90,44 @@ def test_srt_export_uses_subtitle_time_format(tmp_path: Path) -> None:
     )
 
     assert "00:00:01,250 --> 00:00:03,500" in path.read_text(encoding="utf-8")
+
+
+def test_final_markdown_uses_canonical_title_times_and_speaker_labels(tmp_path: Path) -> None:
+    path = tmp_path / "final.md"
+
+    write_final_text_md(
+        path,
+        [
+            TranscriptSegment(
+                segment_id="seg-0000",
+                start_seconds=3.2,
+                end_seconds=17.4,
+                text_raw="hello",
+                text_clean="Привет.",
+                speaker_label="SPEAKER_00",
+                mapping=SpeakerMapping(
+                    machine_label="SPEAKER_00",
+                    display_label="Алексей",
+                ),
+            ),
+            TranscriptSegment(
+                segment_id="seg-0001",
+                start_seconds=17.4,
+                end_seconds=42.0,
+                text_raw="raw text",
+                text_clean="Чистый текст.",
+                speaker_label="SPEAKER_01",
+            ),
+        ],
+        title="Название транскрипции",
+    )
+
+    content = path.read_text(encoding="utf-8")
+    assert content.startswith("# Название транскрипции\n\n## Транскрипция")
+    assert "[00:00:03–00:00:17] Алексей: Привет." in content
+    assert "[00:00:17–00:00:42] Спикер 2: Чистый текст." in content
+    assert "SPEAKER_00" not in content
+    assert "SPEAKER_01" not in content
 
 
 def test_summary_writes_markdown_and_json(tmp_path: Path) -> None:

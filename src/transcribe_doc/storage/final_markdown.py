@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from transcribe_doc.app.models import TranscriptSegment
+from transcribe_doc.app.models import SpeakerMapping, TranscriptSegment
 from transcribe_doc.export.writers import write_final_text_md
 from transcribe_doc.service.types import JsonObject
 
@@ -109,7 +109,7 @@ def save_final_markdown(job: JsonObject, output_root: Path, autosave_dir: str | 
         if previous.exists() and previous.is_file() and previous.resolve() != target.resolve():
             previous.replace(target)
 
-    write_final_text_md(target, segments)
+    write_final_text_md(target, segments, title=_title_from_job(job))
     metadata = _metadata(job)
     metadata.update(
         {
@@ -163,6 +163,7 @@ def _load_segments(output_root: Path, job_id: str) -> list[TranscriptSegment]:
                 text_raw=str(item.get("text_raw") or ""),
                 text_clean=str(item.get("text_clean") or item.get("text_raw") or ""),
                 speaker_label=_string_or_none(item.get("speaker_label")),
+                mapping=_mapping_from_payload(item.get("mapping")),
             )
         )
     if not segments:
@@ -185,6 +186,31 @@ def _title_from_job(job: JsonObject) -> str:
 def _metadata(job: JsonObject) -> JsonObject:
     metadata = job.get("metadata")
     return metadata if isinstance(metadata, dict) else {}
+
+
+def _mapping_from_payload(value: Any) -> SpeakerMapping | None:
+    if not isinstance(value, dict):
+        return None
+    machine_label = _string_or_none(value.get("machine_label"))
+    display_label = _string_or_none(value.get("display_label"))
+    if not machine_label or not display_label:
+        return None
+    metadata = value.get("metadata")
+    return SpeakerMapping(
+        machine_label=machine_label,
+        display_label=display_label,
+        confidence=_float_or_none(value.get("confidence")),
+        metadata=metadata if isinstance(metadata, dict) else {},
+    )
+
+
+def _float_or_none(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _string_or_none(value: Any) -> str | None:

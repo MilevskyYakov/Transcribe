@@ -12,7 +12,12 @@ from xml.sax.saxutils import escape
 from transcribe_doc.app.models import TranscriptSegment
 
 
-def export_all(segments: list[TranscriptSegment], output_paths: dict[str, Path]) -> list[Path]:
+def export_all(
+    segments: list[TranscriptSegment],
+    output_paths: dict[str, Path],
+    *,
+    title: str | None = None,
+) -> list[Path]:
     """Write all requested transcript formats."""
     written: list[Path] = []
     if path := output_paths.get("txt"):
@@ -20,7 +25,7 @@ def export_all(segments: list[TranscriptSegment], output_paths: dict[str, Path])
     if path := output_paths.get("md"):
         written.append(write_md(path, segments))
     if path := output_paths.get("final_text_md"):
-        written.append(write_final_text_md(path, segments))
+        written.append(write_final_text_md(path, segments, title=title))
     if path := output_paths.get("srt"):
         written.append(write_srt(path, segments))
     if path := output_paths.get("json"):
@@ -52,15 +57,19 @@ def write_md(path: Path, segments: Iterable[TranscriptSegment]) -> Path:
     return path
 
 
-def write_final_text_md(path: Path, segments: Iterable[TranscriptSegment]) -> Path:
-    lines = ["# Готовый текст", ""]
+def write_final_text_md(
+    path: Path,
+    segments: Iterable[TranscriptSegment],
+    *,
+    title: str | None = None,
+) -> Path:
+    heading = title.strip() if title and title.strip() else "Готовый текст"
+    lines = [f"# {heading}", "", "## Транскрипция", ""]
     for segment in segments:
         lines.append(
-            f"**{_speaker(segment)}** "
-            f"`{_format_time(segment.start_seconds)}-{_format_time(segment.end_seconds)}`"
+            f"[{_format_final_time(segment.start_seconds)}–{_format_final_time(segment.end_seconds)}] "
+            f"{_final_speaker(segment)}: {segment.text_clean or segment.text_raw}"
         )
-        lines.append("")
-        lines.append(segment.text_clean or segment.text_raw)
         lines.append("")
     path.write_text("\n".join(lines).strip() + "\n", encoding="utf-8")
     return path
@@ -163,10 +172,33 @@ def _speaker(segment: TranscriptSegment) -> str:
     return segment.speaker_label or "SPEAKER"
 
 
+def _final_speaker(segment: TranscriptSegment) -> str:
+    label = (
+        segment.mapping.display_label.strip()
+        if segment.mapping is not None and segment.mapping.display_label.strip()
+        else (segment.speaker_label or "").strip()
+    )
+    if not label:
+        return "Спикер"
+    if label.startswith("SPEAKER_"):
+        suffix = label.removeprefix("SPEAKER_")
+        if suffix.isdigit():
+            return f"Спикер {int(suffix) + 1}"
+        return "Спикер"
+    return label
+
+
 def _format_time(seconds: float) -> str:
     minutes = int(seconds // 60)
     remainder = seconds - minutes * 60
     return f"{minutes:02d}:{remainder:04.1f}"
+
+
+def _format_final_time(seconds: float) -> str:
+    total_seconds = int(round(seconds))
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, secs = divmod(remainder, 60)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d}"
 
 
 def _format_srt_time(seconds: float) -> str:
