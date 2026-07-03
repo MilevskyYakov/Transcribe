@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import shutil
 from importlib import import_module
 from pathlib import Path
 from typing import Any, Callable
@@ -13,6 +14,7 @@ from transcribe_doc.asr.model_registry import DEFAULT_WHISPER_MODELS, EXTERNAL_M
 from transcribe_doc.asr.model_status import (
     ModelStatus,
     emit_download_status,
+    legacy_whisper_cache_dirs,
     read_download_status,
     transcribe_model_cache_dir,
     whisper_cache_dir,
@@ -59,6 +61,31 @@ def inspect_whisper_model(model_name: str) -> dict[str, Any]:
             path=str(model_path),
             size_bytes=size_bytes,
             message=message,
+        ).to_payload()
+
+    legacy_path = migrate_legacy_whisper_model(model_name, model_url, model_path)
+    if legacy_path is not None:
+        ready_path = model_path if model_path.exists() else legacy_path
+        return ModelStatus(
+            name=model_name,
+            label=model_name,
+            backend="whisper",
+            status="ready",
+            path=str(ready_path),
+            size_bytes=ready_path.stat().st_size,
+            message="Модель найдена в старом кэше и доступна без повторного скачивания",
+        ).to_payload()
+
+    corrupt_legacy_path = corrupt_legacy_whisper_model_path(model_url)
+    if corrupt_legacy_path is not None:
+        return ModelStatus(
+            name=model_name,
+            label=model_name,
+            backend="whisper",
+            status="corrupt",
+            path=str(corrupt_legacy_path),
+            size_bytes=corrupt_legacy_path.stat().st_size,
+            message="Файл модели повреждён или скачан не полностью",
         ).to_payload()
 
     return ModelStatus(
@@ -175,6 +202,34 @@ def model_url_for(model_name: str) -> str | None:
 def model_path_for(model_name: str, model_url: str | None = None) -> Path:
     url = model_url or model_url_for(model_name) or f"/{model_name}.pt"
     return whisper_cache_dir() / url.split("/")[-1]
+
+
+def migrate_legacy_whisper_model(model_name: str, model_url: str, target_path: Path) -> Path | None:
+    """Copy a valid legacy Whisper model into the durable model directory if needed."""
+    filename = model_url.split("/")[-1]
+    expected = expected_sha(model_url)
+    for legacy_dir in legacy_whisper_cache_dirs():
+        legacy_path = legacy_dir / filename
+        if not legacy_path.is_file() or sha256(legacy_path) != expected:
+            continue
+        try:
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            if not target_path.exists():
+                shutil.copy2(legacy_path, target_path)
+        except OSError:
+            return legacy_path
+        return target_path
+    return None
+
+
+def corrupt_legacy_whisper_model_path(model_url: str) -> Path | None:
+    filename = model_url.split("/")[-1]
+    expected = expected_sha(model_url)
+    for legacy_dir in legacy_whisper_cache_dirs():
+        legacy_path = legacy_dir / filename
+        if legacy_path.is_file() and sha256(legacy_path) != expected:
+            return legacy_path
+    return None
 
 
 def legacy_external_model_path(filename: str) -> Path:

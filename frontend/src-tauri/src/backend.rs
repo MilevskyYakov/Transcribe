@@ -28,6 +28,7 @@ pub(crate) struct AppBootstrap {
     pub(crate) api_base_url: String,
     pub(crate) app_data_dir: String,
     pub(crate) cache_dir: String,
+    pub(crate) model_dir: String,
     pub(crate) output_dir: String,
     pub(crate) ffmpeg_available: bool,
     pub(crate) ffprobe_available: bool,
@@ -47,6 +48,7 @@ struct BackendRuntime {
 pub(crate) struct BackendState {
     pub(crate) app_data_dir: PathBuf,
     pub(crate) cache_dir: PathBuf,
+    pub(crate) model_dir: PathBuf,
     pub(crate) output_dir: PathBuf,
     pub(crate) media_bin_dir: PathBuf,
     pub(crate) settings_path: PathBuf,
@@ -234,10 +236,12 @@ pub(crate) fn start_backend<R: Runtime>(
     let app_data_dir = app.path().app_data_dir()?;
     let output_dir = app_data_dir.join("output");
     let cache_dir = app_data_dir.join("cache");
+    let model_dir = app_data_dir.join("models");
     let settings_path = app_data_dir.join("settings.json");
     fs::create_dir_all(&output_dir)?;
     fs::create_dir_all(app_data_dir.join("tmp"))?;
     fs::create_dir_all(&cache_dir)?;
+    fs::create_dir_all(&model_dir)?;
     let settings = load_settings(&settings_path);
 
     let resource_dir = bundled_resource_dir_from_exe().unwrap_or_else(dev_resource_dir);
@@ -255,6 +259,7 @@ pub(crate) fn start_backend<R: Runtime>(
     let state = BackendState {
         app_data_dir,
         cache_dir,
+        model_dir,
         output_dir,
         media_bin_dir,
         settings_path,

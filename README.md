@@ -308,7 +308,19 @@ npm run install:local -- --quit-running
 
 В desktop-режиме приложение само запускает локальный backend на свободном
 `127.0.0.1` порту. Runtime data хранится в macOS Application Support:
-`output`, `tmp` и model cache не зависят от папки репозитория.
+`output`, `tmp`, `cache` и durable ASR-модели не зависят от папки репозитория.
+
+Локальные ASR-модели в packaged desktop app — постоянные данные приложения, а
+не disposable cache. Backend sidecar получает `--app-data-dir`, после чего
+использует `TRANSCRIBE_DOC_MODEL_DIR=<app_data_dir>/models`: Whisper-файлы лежат
+в `<app_data_dir>/models/whisper`, external/ONNX ASR runtime — в
+`<app_data_dir>/models/external`. При локальном upgrade/replacement через
+`npm run install:local` не удаляйте macOS Application Support; модель должна
+оставаться `ready` в `/models` и в UI без повторного скачивания. Старые валидные
+модели из `<app_data_dir>/cache/whisper`, `<app_data_dir>/cache/transcribe-doc/models`
+или пользовательского `~/.cache` копируются в canonical model dir при проверке
+статуса; повреждённые/недокачанные файлы остаются `corrupt` и не считаются
+готовыми.
 
 ## Что должно быть в финальной реализации
 

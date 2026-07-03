@@ -44,8 +44,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         config = load_config(args.config)
         app_data_dir = getattr(args, "app_data_dir", None)
         if app_data_dir:
-            config = config_for_app_data_dir(config, app_data_dir)
-            os.environ.setdefault("XDG_CACHE_HOME", str(Path(app_data_dir).expanduser() / "cache"))
+            app_data_path = Path(app_data_dir).expanduser()
+            config = config_for_app_data_dir(config, app_data_path)
+            os.environ["XDG_CACHE_HOME"] = str(app_data_path / "cache")
+            os.environ["TRANSCRIBE_DOC_MODEL_DIR"] = str(app_data_path / "models")
         media_bin_dir = getattr(args, "media_bin_dir", None)
         if media_bin_dir:
             current_path = os.environ.get("PATH", "")

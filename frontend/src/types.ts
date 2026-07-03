@@ -167,6 +167,7 @@ export interface HealthPayload {
     output_dir: string;
     temp_dir: string;
     cache_dir: string;
+    model_dir?: string | null;
   };
   media_tools?: {
     ffmpeg: MediaToolStatus;
@@ -181,6 +182,7 @@ export interface AppEnvironment {
   autosaveMarkdownDir?: string | null;
   appDataDir?: string | null;
   cacheDir?: string | null;
+  modelDir?: string | null;
   outputDir?: string | null;
   ffmpegAvailable?: boolean;
   ffprobeAvailable?: boolean;
