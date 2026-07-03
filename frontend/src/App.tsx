@@ -16,6 +16,7 @@ import {
 import {
   checkForAppUpdate,
   initialUpdateState,
+  isReleaseEndpointUnavailable,
   reduceDownloadEvent,
   updateMessageForError,
   type PendingUpdate,
@@ -86,6 +87,7 @@ export {
 export {
   canRunUpdateAction,
   initialUpdateState,
+  isReleaseEndpointUnavailable,
   reduceDownloadEvent,
   updateActionLabel,
   updateProgressLabel,
@@ -592,6 +594,10 @@ export function App() {
         message: `Доступна версия ${update.version}. Обновление будет проверено подписью перед установкой.`
       });
     } catch (error) {
+      if (isReleaseEndpointUnavailable(error)) {
+        setUpdateState({ status: "not-available", message: updateMessageForError(error) });
+        return;
+      }
       setUpdateState({ status: "error", message: updateMessageForError(error) });
     }
   }
