@@ -34,6 +34,7 @@
     "resources": [
       "resources/configs",
       "resources/python"
-    ]
+    ],
+    "icon": ["icons/icon.png"]
   }
 }
