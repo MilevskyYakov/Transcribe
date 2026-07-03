@@ -2,8 +2,8 @@ mod backend;
 mod commands;
 mod settings;
 
-use backend::{start_backend, BackendState};
-use tauri::{Manager, WindowEvent};
+use backend::start_backend;
+use tauri::Manager;
 
 fn main() {
     tauri::Builder::default()
@@ -16,13 +16,6 @@ fn main() {
             let state = start_backend(app.handle())?;
             app.manage(state);
             Ok(())
-        })
-        .on_window_event(|window, event| {
-            if matches!(event, WindowEvent::CloseRequested { .. }) {
-                if let Some(state) = window.app_handle().try_state::<BackendState>() {
-                    state.stop();
-                }
-            }
         })
         .invoke_handler(tauri::generate_handler![
             commands::app_bootstrap,
