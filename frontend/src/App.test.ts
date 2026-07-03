@@ -16,6 +16,7 @@ import {
   backendLifecycleLabel,
   backendLifecycleTone,
   compareArtifactsForDisplay,
+  isReleaseEndpointUnavailable,
   isRawRuntimeDetail,
   jobDisplayTitle,
   modelDownloadActionLabel,
@@ -417,6 +418,13 @@ describe("app updater presentation", () => {
     );
     expect(updateStatusTone("available")).toBe("ok");
     expect(updateStatusTone("error")).toBe("error");
+  });
+
+  it("treats an unpublished release feed as not configured yet", () => {
+    const missingFeedError = new Error("could not fetch latest.json: 404 Not Found");
+
+    expect(isReleaseEndpointUnavailable(missingFeedError)).toBe(true);
+    expect(updateStatusTone("not-available")).toBe("warn");
   });
 
   it("tracks signed updater download progress", () => {

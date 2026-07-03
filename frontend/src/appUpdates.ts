@@ -62,6 +62,9 @@ export function updateProgressLabel(state: UpdateState): string | null {
 
 export function updateMessageForError(error: unknown): string {
   const detail = error instanceof Error ? error.message : String(error);
+  if (isReleaseEndpointUnavailable(error)) {
+    return "Канал обновлений ещё не опубликован. Приложение продолжит работать; проверьте позже.";
+  }
   if (detail.toLowerCase().includes("could not fetch") || detail.toLowerCase().includes("network")) {
     return "Не удалось проверить обновление: нет связи с release endpoint.";
   }
@@ -69,6 +72,16 @@ export function updateMessageForError(error: unknown): string {
     return "Обновление не установлено: подпись не прошла проверку.";
   }
   return `Не удалось проверить обновление: ${detail}`;
+}
+
+export function isReleaseEndpointUnavailable(error: unknown): boolean {
+  const detail = error instanceof Error ? error.message : String(error);
+  const normalized = detail.toLowerCase();
+  return (
+    normalized.includes("404") ||
+    normalized.includes("not found") ||
+    normalized.includes("release not found")
+  );
 }
 
 export async function checkForAppUpdate(): Promise<PendingUpdate | null> {
