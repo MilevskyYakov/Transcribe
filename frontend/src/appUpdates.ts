@@ -62,11 +62,8 @@ export function updateProgressLabel(state: UpdateState): string | null {
 
 export function updateMessageForError(error: unknown): string {
   const detail = error instanceof Error ? error.message : String(error);
-  if (isReleaseEndpointUnavailable(error)) {
-    return "Канал обновлений ещё не опубликован. Приложение продолжит работать; проверьте позже.";
-  }
-  if (detail.toLowerCase().includes("could not fetch") || detail.toLowerCase().includes("network")) {
-    return "Не удалось проверить обновление: нет связи с release endpoint.";
+  if (isUpdateFeedCheckFailure(error)) {
+    return "Канал обновлений пока недоступен. Приложение работает; попробуйте проверить позже.";
   }
   if (detail.toLowerCase().includes("signature")) {
     return "Обновление не установлено: подпись не прошла проверку.";
@@ -81,6 +78,17 @@ export function isReleaseEndpointUnavailable(error: unknown): boolean {
     normalized.includes("404") ||
     normalized.includes("not found") ||
     normalized.includes("release not found")
+  );
+}
+
+export function isUpdateFeedCheckFailure(error: unknown): boolean {
+  const detail = error instanceof Error ? error.message : String(error);
+  const normalized = detail.toLowerCase();
+  return (
+    isReleaseEndpointUnavailable(error) ||
+    normalized.includes("could not fetch") ||
+    normalized.includes("network") ||
+    normalized.includes("release endpoint")
   );
 }
 

@@ -17,6 +17,7 @@ import {
   backendLifecycleTone,
   compareArtifactsForDisplay,
   isReleaseEndpointUnavailable,
+  isUpdateFeedCheckFailure,
   isRawRuntimeDetail,
   jobDisplayTitle,
   modelDownloadActionLabel,
@@ -422,8 +423,10 @@ describe("app updater presentation", () => {
 
   it("treats an unpublished release feed as not configured yet", () => {
     const missingFeedError = new Error("could not fetch latest.json: 404 Not Found");
+    const unreachableFeedError = new Error("could not fetch release endpoint");
 
     expect(isReleaseEndpointUnavailable(missingFeedError)).toBe(true);
+    expect(isUpdateFeedCheckFailure(unreachableFeedError)).toBe(true);
     expect(updateStatusTone("not-available")).toBe("warn");
   });
 
