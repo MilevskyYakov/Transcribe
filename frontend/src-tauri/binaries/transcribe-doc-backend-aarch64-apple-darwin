@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -11,7 +11,24 @@ if [ ! -d "$RESOURCE_DIR/python" ]; then
   RESOURCE_DIR="$REPO_ROOT/frontend/src-tauri/resources"
 fi
 
-if [ -x "$RESOURCE_DIR/python/bin/python" ]; then
+PYVENV_CFG="$RESOURCE_DIR/python/pyvenv.cfg"
+SITE_PACKAGES=""
+BASE_PYTHON=""
+
+if [ -f "$PYVENV_CFG" ]; then
+  SITE_PACKAGES="$(find "$RESOURCE_DIR/python/lib" -maxdepth 3 -type d -name site-packages -print -quit 2>/dev/null || true)"
+  BASE_PYTHON="$(awk -F' = ' '/^executable = / { print $2; exit }' "$PYVENV_CFG" 2>/dev/null || true)"
+  if [ ! -x "$BASE_PYTHON" ]; then
+    PYTHON_HOME="$(awk -F' = ' '/^home = / { print $2; exit }' "$PYVENV_CFG" 2>/dev/null || true)"
+    if [ -n "$PYTHON_HOME" ] && [ -x "$PYTHON_HOME/python3.11" ]; then
+      BASE_PYTHON="$PYTHON_HOME/python3.11"
+    fi
+  fi
+fi
+
+if [ -n "$BASE_PYTHON" ] && [ -x "$BASE_PYTHON" ] && [ -n "$SITE_PACKAGES" ]; then
+  PYTHON="$BASE_PYTHON"
+elif [ -x "$RESOURCE_DIR/python/bin/python" ]; then
   PYTHON="$RESOURCE_DIR/python/bin/python"
 elif [ -n "$REPO_ROOT" ] && [ -x "$REPO_ROOT/.venv/bin/python" ]; then
   PYTHON="$REPO_ROOT/.venv/bin/python"
@@ -26,4 +43,17 @@ fi
 
 export PATH="$SCRIPT_DIR:$RESOURCE_DIR/bin:${PATH:-}"
 export PYTHONUNBUFFERED=1
-exec "$PYTHON" -m transcribe_doc.cli.main "$@"
+if [ -n "$SITE_PACKAGES" ] && [ "$PYTHON" = "$BASE_PYTHON" ]; then
+  unset PYTHONPATH
+  exec "$PYTHON" - "$SITE_PACKAGES" "$@" <<'PY'
+import runpy
+import site
+import sys
+
+site.addsitedir(sys.argv[1])
+sys.argv = ["transcribe_doc.cli.main", *sys.argv[2:]]
+runpy.run_module("transcribe_doc.cli.main", run_name="__main__")
+PY
+else
+  exec "$PYTHON" -m transcribe_doc.cli.main "$@"
+fi
