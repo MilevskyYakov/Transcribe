@@ -22,7 +22,11 @@ import {
   speakerTurns,
   titleValidationMessage,
   titleFromFilename,
-  selectedJobDetailsRefreshKey
+  selectedJobDetailsRefreshKey,
+  updateActionLabel,
+  updateProgressLabel,
+  updateStatusTone,
+  reduceDownloadEvent
 } from "./App";
 import type { Artifact, Job, ModelStatus } from "./types";
 
@@ -399,5 +403,33 @@ describe("default model rules", () => {
     expect(modelDownloadActionLabel({ ...model("error", "parakeet-v3"), stale_download: true })).toBe(
       "Скачать заново"
     );
+  });
+});
+
+describe("app updater presentation", () => {
+  it("labels update states for a packaged macOS app", () => {
+    expect(updateActionLabel({ status: "idle", message: "Проверить" }, true)).toBe("Проверить");
+    expect(updateActionLabel({ status: "available", version: "0.2.0", message: "Доступна" }, true)).toBe(
+      "Установить"
+    );
+    expect(updateActionLabel({ status: "idle", message: "Проверить" }, false)).toBe(
+      "Только в приложении"
+    );
+    expect(updateStatusTone("available")).toBe("ok");
+    expect(updateStatusTone("error")).toBe("error");
+  });
+
+  it("tracks signed updater download progress", () => {
+    const started = reduceDownloadEvent(
+      { status: "available", version: "0.2.0", message: "Доступна" },
+      { event: "Started", data: { contentLength: 10 * 1024 * 1024 } }
+    );
+    const progressed = reduceDownloadEvent(started, {
+      event: "Progress",
+      data: { chunkLength: 5 * 1024 * 1024 }
+    });
+
+    expect(progressed.status).toBe("downloading");
+    expect(updateProgressLabel(progressed)).toBe("50% · 5.0 MB из 10.0 MB");
   });
 });

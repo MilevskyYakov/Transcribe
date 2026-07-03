@@ -307,6 +307,21 @@ npm run install:local -- --quit-running
 Полезные флаги: `--no-open` для automation, `--install-dir DIR` для установки не
 в `/Applications`, `--help` для справки.
 
+### Signed in-app updates
+
+Packaged macOS app also has a Tauri v2 signed updater. In the installed app,
+use the sidebar card “Обновление” to check the configured release endpoint,
+show no-update/update/error states, download a signed update, and install it.
+After install the app asks for a restart so the new version opens cleanly.
+
+Default release endpoint: GitHub Releases static `latest.json` at
+`https://github.com/kairosUNIVERSAL/Transcribe/releases/latest/download/latest.json`.
+Updater artifacts are generated during Tauri build when the release environment
+provides `TAURI_SIGNING_PRIVATE_KEY` (and optional
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`). The private key must stay outside the repo;
+only the public updater key is committed in `frontend/src-tauri/tauri.conf.json`.
+Full release/update runbook: `docs/mac-updater.md`.
+
 В desktop-режиме приложение само запускает локальный backend на свободном
 `127.0.0.1` порту. Runtime data хранится в macOS Application Support:
 `output`, `tmp`, `cache` и durable ASR-модели не зависят от папки репозитория.

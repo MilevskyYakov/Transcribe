@@ -1,4 +1,11 @@
 import { RefreshCw, Server, Settings, SlidersHorizontal } from "lucide-react";
+import {
+  canRunUpdateAction,
+  updateActionLabel,
+  updateProgressLabel,
+  updateStatusTone,
+  type UpdateState
+} from "../appUpdates";
 import type { BackendLifecycle, Job } from "../types";
 import {
   backendLifecycleLabel,
@@ -23,6 +30,7 @@ interface AppSidebarProps {
   outputDir: string | null;
   selectedJobId: string | null;
   selectedModelTitle: string;
+  updateState: UpdateState;
   watchFolder: string;
   onApiBaseChange: (value: string) => void;
   onBatchPathsChange: (value: string) => void;
@@ -30,6 +38,7 @@ interface AppSidebarProps {
   onRefresh: () => void;
   onRetryBackendStart: () => void;
   onSelectJob: (jobId: string) => void;
+  onUpdateAction: () => void;
   onCleanupTemp: () => void;
   onSubmitBatch: () => void;
   onSubmitWatchScan: () => void;
@@ -50,6 +59,7 @@ export function AppSidebar({
   outputDir,
   selectedJobId,
   selectedModelTitle,
+  updateState,
   watchFolder,
   onApiBaseChange,
   onBatchPathsChange,
@@ -57,6 +67,7 @@ export function AppSidebar({
   onRefresh,
   onRetryBackendStart,
   onSelectJob,
+  onUpdateAction,
   onCleanupTemp,
   onSubmitBatch,
   onSubmitWatchScan,
@@ -64,6 +75,7 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const lifecycleTone = backendLifecycleTone(backendLifecycle);
   const lifecycleLabel = backendLifecycleLabel(backendLifecycle);
+  const updateProgress = updateProgressLabel(updateState);
   const technicalDetails = [
     `state: ${backendLifecycle?.state ?? health}`,
     `api: ${apiBase}`,
@@ -119,6 +131,22 @@ export function AppSidebar({
         <button className="secondary-action" type="button" onClick={onModelsOpen}>
           <SlidersHorizontal size={16} />
           <span>Модели</span>
+        </button>
+      </section>
+
+      <section className={`update-card ${updateStatusTone(updateState.status)}`} aria-label="Обновление приложения">
+        <div>
+          <span>Обновление</span>
+          <strong>{updateState.version ? `Версия ${updateState.version}` : "macOS app"}</strong>
+          <p>{updateProgress ?? updateState.message}</p>
+        </div>
+        <button
+          className="secondary-action"
+          disabled={!canRunUpdateAction(updateState, isManagedApp)}
+          type="button"
+          onClick={onUpdateAction}
+        >
+          {updateActionLabel(updateState, isManagedApp)}
         </button>
       </section>
 
