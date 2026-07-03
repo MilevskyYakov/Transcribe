@@ -1,18 +1,16 @@
 use crate::settings::load_settings;
 use serde::Serialize;
 use std::{
-    collections::VecDeque,
     fs,
+    io::{BufRead, BufReader},
     net::TcpListener,
     path::{Path, PathBuf},
+    process::{Child, Command, Stdio},
     sync::Mutex,
+    thread,
     time::{SystemTime, UNIX_EPOCH},
 };
 use tauri::{Manager, Runtime};
-use tauri_plugin_shell::{
-    process::{CommandChild, CommandEvent},
-    ShellExt,
-};
 
 #[derive(Clone, Serialize)]
 pub(crate) struct BackendLifecycleSnapshot {
@@ -41,7 +39,7 @@ pub(crate) struct AppBootstrap {
 
 struct BackendRuntime {
     api_base_url: String,
-    child: Option<CommandChild>,
+    child: Option<Child>,
     lifecycle: BackendLifecycleSnapshot,
 }
 
@@ -56,6 +54,16 @@ pub(crate) struct BackendState {
     pub(crate) autosave_markdown_dir: Mutex<Option<String>>,
     config_path: PathBuf,
     runtime: Mutex<BackendRuntime>,
+}
+
+impl Drop for BackendState {
+    fn drop(&mut self) {
+        if let Ok(mut runtime) = self.runtime.lock() {
+            if let Some(mut process) = runtime.child.take() {
+                let _ = process.kill();
+            }
+        }
+    }
 }
 
 impl BackendState {
@@ -103,7 +111,7 @@ impl BackendState {
 
     pub(crate) fn stop(&self) {
         if let Ok(mut runtime) = self.runtime.lock() {
-            if let Some(process) = runtime.child.take() {
+            if let Some(mut process) = runtime.child.take() {
                 let _ = process.kill();
             }
         }
@@ -111,11 +119,11 @@ impl BackendState {
 
     pub(crate) fn restart<R: Runtime>(
         &self,
-        app: &tauri::AppHandle<R>,
+        _app: &tauri::AppHandle<R>,
     ) -> BackendLifecycleSnapshot {
         self.stop();
         self.set_lifecycle("restarting", "Перезапускаем…", None);
-        self.spawn_backend(app);
+        self.spawn_backend();
         self.lifecycle()
     }
 
@@ -128,18 +136,7 @@ impl BackendState {
         }
     }
 
-    fn push_output(&self, line: String) {
-        if let Ok(mut runtime) = self.runtime.lock() {
-            let mut recent: VecDeque<String> = runtime.lifecycle.recent_output.drain(..).collect();
-            recent.push_back(line.trim().to_string());
-            while recent.len() > 20 {
-                recent.pop_front();
-            }
-            runtime.lifecycle.recent_output = recent.into_iter().collect();
-        }
-    }
-
-    fn spawn_backend<R: Runtime>(&self, app: &tauri::AppHandle<R>) {
+    fn spawn_backend(&self) {
         let port = match reserve_port() {
             Ok(port) => port,
             Err(error) => {
@@ -172,28 +169,41 @@ impl BackendState {
         ];
 
         eprintln!("Starting Transcribe Doc backend on {api_base_url}");
-        let sidecar = match app.shell().sidecar("transcribe-doc-backend") {
-            Ok(command) => command.args(args),
+        let sidecar_path = backend_sidecar_path();
+        let mut child = match Command::new(&sidecar_path)
+            .args(args)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+        {
+            Ok(child) => child,
             Err(error) => {
                 self.set_lifecycle(
                     "error",
                     "Не удалось запустить",
-                    Some(format!("Failed to prepare backend sidecar: {error}")),
+                    Some(format!(
+                        "Failed to spawn backend sidecar at {}: {error}",
+                        sidecar_path.display()
+                    )),
                 );
                 return;
             }
         };
-        let (mut rx, child) = match sidecar.spawn() {
-            Ok(result) => result,
-            Err(error) => {
-                self.set_lifecycle(
-                    "error",
-                    "Не удалось запустить",
-                    Some(format!("Failed to spawn backend sidecar: {error}")),
-                );
-                return;
-            }
-        };
+
+        if let Some(stdout) = child.stdout.take() {
+            thread::spawn(move || {
+                for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+                    println!("transcribe-doc backend: {line}");
+                }
+            });
+        }
+        if let Some(stderr) = child.stderr.take() {
+            thread::spawn(move || {
+                for line in BufReader::new(stderr).lines().map_while(Result::ok) {
+                    eprintln!("transcribe-doc backend: {line}");
+                }
+            });
+        }
 
         if let Ok(mut runtime) = self.runtime.lock() {
             runtime.child = Some(child);
@@ -201,32 +211,6 @@ impl BackendState {
             runtime.lifecycle.human_message = "Проверяем…".to_string();
             runtime.lifecycle.last_check_at = Some(now_stamp());
         }
-
-        let app_handle = app.clone();
-        tauri::async_runtime::spawn(async move {
-            while let Some(event) = rx.recv().await {
-                if let Some(state) = app_handle.try_state::<BackendState>() {
-                    match event {
-                        CommandEvent::Stdout(line) => {
-                            let text = String::from_utf8_lossy(&line).to_string();
-                            println!("transcribe-doc backend: {}", text);
-                            state.push_output(format!("stdout: {text}"));
-                        }
-                        CommandEvent::Stderr(line) => {
-                            let text = String::from_utf8_lossy(&line).to_string();
-                            eprintln!("transcribe-doc backend: {}", text);
-                            state.push_output(format!("stderr: {text}"));
-                        }
-                        CommandEvent::Terminated(payload) => {
-                            let detail = format!("Backend process terminated: {payload:?}");
-                            state.push_output(detail.clone());
-                            state.set_lifecycle("error", "Не удалось запустить", Some(detail));
-                        }
-                        _ => {}
-                    }
-                }
-            }
-        });
     }
 }
 
@@ -272,8 +256,21 @@ pub(crate) fn start_backend<R: Runtime>(
             lifecycle: lifecycle_snapshot("starting", "Запускаем…", None::<String>),
         }),
     };
-    state.spawn_backend(app);
+    state.spawn_backend();
     Ok(state)
+}
+
+fn backend_sidecar_path() -> PathBuf {
+    if let Some(path) = std::env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(|dir| dir.join("transcribe-doc-backend")))
+        .filter(|path| path.exists())
+    {
+        return path;
+    }
+
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("binaries/transcribe-doc-backend-aarch64-apple-darwin")
 }
 
 pub(crate) fn binary_path(root: &Path, name: &str) -> Option<PathBuf> {
