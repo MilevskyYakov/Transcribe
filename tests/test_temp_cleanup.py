@@ -45,7 +45,78 @@ def test_cleanup_successful_job_media_deletes_only_managed_temp_files(tmp_path: 
     assert not normalized_audio.exists()
     assert external_original.exists()
     assert job["artifacts"]["normalized_audio"] is None
-    assert job["metadata"]["temp_cleanup"]["reason"] == "final_markdown_saved"
+    assert job["metadata"]["temp_cleanup"]["reason"] == "job_success"
+
+
+def test_cleanup_successful_job_removes_internal_artifacts_but_keeps_durable_outputs(
+    tmp_path: Path,
+) -> None:
+    output_root = tmp_path / "output"
+    temp_root = tmp_path / "tmp"
+    job_dir = output_root / "job-clean"
+    artifacts_dir = job_dir / "artifacts"
+    model_dir = tmp_path / "app-data" / "models"
+    artifacts_dir.mkdir(parents=True)
+    model_dir.mkdir(parents=True)
+
+    durable_segment = job_dir / "segments.json"
+    durable_final = job_dir / "final_speech_text.md"
+    raw_transcript = job_dir / "transcript_raw.json"
+    diarization_dump = artifacts_dir / "diarization_dump.json"
+    events_jsonl = artifacts_dir / "events.jsonl"
+    log_file = artifacts_dir / "job.log"
+    config_snapshot = artifacts_dir / "config_snapshot.json"
+    model_file = model_dir / "parakeet.onnx"
+    for path in (
+        durable_segment,
+        durable_final,
+        raw_transcript,
+        diarization_dump,
+        events_jsonl,
+        log_file,
+        config_snapshot,
+        model_file,
+    ):
+        path.write_text("data", encoding="utf-8")
+    job = {
+        "job_id": "job-clean",
+        "source_paths": [],
+        "status": "completed",
+        "artifacts": {
+            "segments_json": str(durable_segment),
+            "final_speech_text_md": str(durable_final),
+            "raw_transcript": str(raw_transcript),
+            "diarization_dump": str(diarization_dump),
+            "events_jsonl": str(events_jsonl),
+            "log_file": str(log_file),
+            "config_snapshot": str(config_snapshot),
+        },
+        "metadata": {"model_dir": str(model_dir)},
+    }
+
+    report = cleanup_successful_job_media(
+        job,
+        output_root=output_root,
+        job_id="job-clean",
+        temp_root=temp_root,
+    )
+
+    assert report.removed_count == 5
+    assert durable_segment.exists()
+    assert durable_final.exists()
+    assert model_file.exists()
+    assert not raw_transcript.exists()
+    assert not diarization_dump.exists()
+    assert not events_jsonl.exists()
+    assert not log_file.exists()
+    assert not config_snapshot.exists()
+    assert job["artifacts"]["segments_json"] == str(durable_segment)
+    assert job["artifacts"]["final_speech_text_md"] == str(durable_final)
+    assert job["artifacts"]["raw_transcript"] is None
+    assert job["artifacts"]["diarization_dump"] is None
+    assert job["artifacts"]["events_jsonl"] is None
+    assert job["artifacts"]["log_file"] is None
+    assert job["artifacts"]["config_snapshot"] is None
 
 
 def test_stale_cleanup_removes_failed_old_media_but_retains_recent(tmp_path: Path) -> None:
