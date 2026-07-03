@@ -13,6 +13,7 @@ from transcribe_doc.asr.model_registry import ExternalModelSpec, external_spec
 from transcribe_doc.asr.model_status import (
     ModelStatus,
     emit_download_status,
+    legacy_transcribe_model_cache_dirs,
     read_download_status,
     transcribe_model_cache_dir,
     utc_timestamp,
@@ -25,7 +26,7 @@ ModelProgress = Callable[[dict[str, Any]], None]
 
 def inspect_external_model(spec: ExternalModelSpec) -> dict[str, Any]:
     runtime_dir = external_model_runtime_path(spec.name)
-    legacy_path = external_model_source_path(spec)
+    source_path = external_model_source_path(spec)
     base = spec.metadata(runtime_dir)
     download_status = read_download_status(spec.name)
 
@@ -37,6 +38,13 @@ def inspect_external_model(spec: ExternalModelSpec) -> dict[str, Any]:
             status="ready",
             size_bytes=path_size(runtime_dir),
             message="Модель готова",
+        ).to_payload()
+    if runtime_dir.exists():
+        return ModelStatus(
+            **base,
+            status="corrupt",
+            size_bytes=path_size(runtime_dir),
+            message="Файлы модели повреждены или скачаны не полностью",
         ).to_payload()
     if download_status and download_status.get("status") == "error":
         return {**base, **download_status, "status": "error", "stale_download": True}
@@ -52,24 +60,40 @@ def inspect_external_model(spec: ExternalModelSpec) -> dict[str, Any]:
             "stale_download": True,
             "message": "Файлы модели не найдены в кэше. Нажмите «Скачать заново».",
         }
-    if not legacy_path.exists():
+    migrated_path = migrate_legacy_external_model(spec, runtime_dir, source_path)
+    if migrated_path is not None:
+        return ModelStatus(
+            **spec.metadata(migrated_path),
+            status="ready",
+            size_bytes=path_size(migrated_path),
+            message="Модель найдена в старом кэше и доступна без повторного скачивания",
+        ).to_payload()
+    corrupt_legacy_path = corrupt_legacy_external_model_path(spec)
+    if corrupt_legacy_path is not None:
+        return ModelStatus(
+            **spec.metadata(corrupt_legacy_path),
+            status="corrupt",
+            size_bytes=path_size(corrupt_legacy_path),
+            message="Файлы модели повреждены или скачаны не полностью",
+        ).to_payload()
+    if not source_path.exists():
         return ModelStatus(
             **base,
             status="missing",
             size_bytes=0,
             message="Модель ещё не скачана",
         ).to_payload()
-    if spec.expected_sha256 and sha256(legacy_path) != spec.expected_sha256:
+    if spec.expected_sha256 and sha256(source_path) != spec.expected_sha256:
         return ModelStatus(
             **base,
             status="corrupt",
-            size_bytes=legacy_path.stat().st_size,
+            size_bytes=source_path.stat().st_size,
             message="Файл модели повреждён или скачан не полностью",
         ).to_payload()
     return ModelStatus(
-        **base,
+        **spec.metadata(source_path),
         status="ready",
-        size_bytes=legacy_path.stat().st_size,
+        size_bytes=source_path.stat().st_size,
         message="Модель готова",
     ).to_payload()
 
@@ -160,6 +184,48 @@ def external_model_runtime_path(model_name: str) -> Path:
 
 def external_model_source_path(spec: ExternalModelSpec) -> Path:
     return transcribe_model_cache_dir() / spec.filename
+
+
+def migrate_legacy_external_model(
+    spec: ExternalModelSpec, runtime_dir: Path, source_path: Path
+) -> Path | None:
+    """Copy a valid legacy external ASR model into the durable model directory if needed."""
+    for legacy_dir in legacy_transcribe_model_cache_dirs():
+        legacy_runtime_dir = legacy_dir / spec.name
+        if external_ready_path_exists(legacy_runtime_dir):
+            try:
+                runtime_dir.parent.mkdir(parents=True, exist_ok=True)
+                if not runtime_dir.exists():
+                    shutil.copytree(legacy_runtime_dir, runtime_dir)
+            except OSError:
+                return legacy_runtime_dir
+            return runtime_dir
+
+        legacy_source_path = legacy_dir / spec.filename
+        if not legacy_source_path.is_file():
+            continue
+        if spec.expected_sha256 and sha256(legacy_source_path) != spec.expected_sha256:
+            continue
+        try:
+            source_path.parent.mkdir(parents=True, exist_ok=True)
+            if not source_path.exists():
+                shutil.copy2(legacy_source_path, source_path)
+        except OSError:
+            return legacy_source_path
+        return source_path
+    return None
+
+
+def corrupt_legacy_external_model_path(spec: ExternalModelSpec) -> Path | None:
+    for legacy_dir in legacy_transcribe_model_cache_dirs():
+        legacy_runtime_dir = legacy_dir / spec.name
+        if legacy_runtime_dir.exists() and not external_ready_path_exists(legacy_runtime_dir):
+            return legacy_runtime_dir
+        legacy_source_path = legacy_dir / spec.filename
+        if spec.expected_sha256 and legacy_source_path.is_file():
+            if sha256(legacy_source_path) != spec.expected_sha256:
+                return legacy_source_path
+    return None
 
 
 def external_ready_path_exists(path: Path) -> bool:

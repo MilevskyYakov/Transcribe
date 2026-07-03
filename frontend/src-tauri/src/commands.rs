@@ -21,6 +21,7 @@ pub(crate) fn app_bootstrap(state: tauri::State<'_, BackendState>) -> AppBootstr
         api_base_url: state.api_base_url(),
         app_data_dir: state.app_data_dir.display().to_string(),
         cache_dir: state.cache_dir.display().to_string(),
+        model_dir: state.model_dir.display().to_string(),
         output_dir: state.output_dir.display().to_string(),
         ffmpeg_available: ffmpeg_path.is_some(),
         ffprobe_available: ffprobe_path.is_some(),

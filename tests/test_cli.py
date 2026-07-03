@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from transcribe_doc.cli.main import build_parser, main
+from transcribe_doc.cli import commands
 
 
 def test_parser_defines_required_commands() -> None:
@@ -49,6 +50,26 @@ def test_serve_accepts_app_packaging_overrides() -> None:
     assert args.command == "serve"
     assert args.app_data_dir == "/tmp/transcribe-doc-app"
     assert args.media_bin_dir == "/tmp/transcribe-doc-bin"
+
+
+def test_serve_app_data_dir_sets_durable_model_dir(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "old-cache"))
+    monkeypatch.setenv("TRANSCRIBE_DOC_MODEL_DIR", str(tmp_path / "old-models"))
+    monkeypatch.setattr(commands, "serve_command", lambda args, config: 0)
+
+    result = main(
+        [
+            "--config",
+            "configs/default.yaml",
+            "serve",
+            "--app-data-dir",
+            str(tmp_path / "app-data"),
+        ]
+    )
+
+    assert result == 0
+    assert os.environ["XDG_CACHE_HOME"] == str(tmp_path / "app-data" / "cache")
+    assert os.environ["TRANSCRIBE_DOC_MODEL_DIR"] == str(tmp_path / "app-data" / "models")
 
 
 def test_python_module_invocation_executes_cli_help() -> None:

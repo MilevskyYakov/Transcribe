@@ -54,6 +54,7 @@ class AppPathsResponse:
     output_dir: str
     temp_dir: str
     cache_dir: str
+    model_dir: str | None = None
 
 
 @dataclass(frozen=True)

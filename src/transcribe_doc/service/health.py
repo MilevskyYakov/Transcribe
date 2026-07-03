@@ -7,6 +7,7 @@ import shutil
 from pathlib import Path
 
 from transcribe_doc.app.config import AppConfig
+from transcribe_doc.asr.model_status import model_root_dir
 
 from .contracts import (
     AppPathsResponse,
@@ -26,6 +27,7 @@ def health_payload(config: AppConfig) -> JsonObject:
                 output_dir=config.app.output_dir,
                 temp_dir=config.app.temp_dir,
                 cache_dir=os.getenv("XDG_CACHE_HOME", str(Path.home() / ".cache")),
+                model_dir=str(model_root_dir()) if model_root_dir() is not None else None,
             ),
             media_tools=MediaToolsResponse(
                 ffmpeg=tool_status_response("ffmpeg"),

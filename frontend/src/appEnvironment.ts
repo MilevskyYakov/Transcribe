@@ -6,6 +6,7 @@ interface TauriBootstrapPayload {
   autosave_markdown_dir?: string | null;
   app_data_dir: string;
   cache_dir: string;
+  model_dir?: string | null;
   output_dir: string;
   ffmpeg_available: boolean;
   ffprobe_available: boolean;
@@ -44,6 +45,7 @@ export async function resolveAppEnvironment(defaultApiBase: string): Promise<App
       autosaveMarkdownDir: payload.autosave_markdown_dir ?? null,
       appDataDir: payload.app_data_dir,
       cacheDir: payload.cache_dir,
+      modelDir: payload.model_dir ?? null,
       outputDir: payload.output_dir,
       ffmpegAvailable: payload.ffmpeg_available,
       ffprobeAvailable: payload.ffprobe_available,

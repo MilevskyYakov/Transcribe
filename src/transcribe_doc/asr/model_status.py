@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 ModelStatusValue = Literal["unknown", "missing", "queued", "downloading", "ready", "corrupt", "error"]
+MODEL_DIR_ENV = "TRANSCRIBE_DOC_MODEL_DIR"
 
 
 @dataclass(frozen=True)
@@ -51,14 +52,63 @@ def utc_timestamp() -> str:
     return datetime.utcnow().isoformat(timespec="seconds") + "Z"
 
 
-def whisper_cache_dir() -> Path:
+def model_root_dir() -> Path | None:
+    value = os.getenv(MODEL_DIR_ENV)
+    if not value:
+        return None
+    return Path(value).expanduser()
+
+
+def default_cache_root() -> Path:
     cache_root = os.getenv("XDG_CACHE_HOME") or str(Path.home() / ".cache")
-    return Path(cache_root) / "whisper"
+    return Path(cache_root).expanduser()
+
+
+def whisper_cache_dir() -> Path:
+    model_root = model_root_dir()
+    if model_root is not None:
+        return model_root / "whisper"
+    return default_cache_root() / "whisper"
 
 
 def transcribe_model_cache_dir() -> Path:
-    cache_root = os.getenv("XDG_CACHE_HOME") or str(Path.home() / ".cache")
-    return Path(cache_root) / "transcribe-doc" / "models"
+    model_root = model_root_dir()
+    if model_root is not None:
+        return model_root / "external"
+    return default_cache_root() / "transcribe-doc" / "models"
+
+
+def legacy_whisper_cache_dirs() -> list[Path]:
+    """Return old Whisper cache locations to search when a durable model dir is set."""
+    if model_root_dir() is None:
+        return []
+    return _unique_existing_style_dirs([default_cache_root() / "whisper", Path.home() / ".cache" / "whisper"])
+
+
+def legacy_transcribe_model_cache_dirs() -> list[Path]:
+    """Return old external ASR cache locations to search when a durable model dir is set."""
+    if model_root_dir() is None:
+        return []
+    return _unique_existing_style_dirs(
+        [
+            default_cache_root() / "transcribe-doc" / "models",
+            Path.home() / ".cache" / "transcribe-doc" / "models",
+        ]
+    )
+
+
+def _unique_existing_style_dirs(paths: list[Path]) -> list[Path]:
+    canonical_dirs = {whisper_cache_dir().resolve(strict=False), transcribe_model_cache_dir().resolve(strict=False)}
+    result: list[Path] = []
+    seen: set[Path] = set()
+    for path in paths:
+        expanded = path.expanduser()
+        resolved = expanded.resolve(strict=False)
+        if resolved in canonical_dirs or resolved in seen:
+            continue
+        seen.add(resolved)
+        result.append(expanded)
+    return result
 
 
 def download_status_path(model_name: str) -> Path:
