@@ -48,15 +48,17 @@
 - srt
 - json
 
-Дополнительно сохраняются промежуточные артефакты:
-- extracted audio;
-- normalized audio;
-- raw transcript;
-- aligned transcript;
-- diarization dump;
-- merged transcript;
-- logs;
-- config snapshot.
+Во время обработки приложение создаёт промежуточные артефакты:
+extracted/normalized audio, raw ASR payload, diarization dump, logs/events и
+config snapshot. После успешного завершения job эти internal/session файлы
+автоматически удаляются. Постоянно сохраняются только пользовательские результаты
+и компактные данные, нужные для app history, просмотра transcript и повторного
+сохранения результата: final markdown, выбранные exports, `segments.json`,
+`words.json`, summary и `job.json`.
+
+Failed jobs могут временно сохранять диагностический минимум. Старые failed/orphan
+temp files удаляются retention cleanup'ом. Локальные ASR-модели хранятся в
+durable app data/cache directory и не попадают под cleanup временных job-файлов.
 
 ## Архитектурная идея
 
@@ -181,7 +183,6 @@ Browser frontend остаётся dev/debug режимом поверх `transcr
 ```text
 output/<job_id>/
   job.json
-  transcript_raw.json
   segments.json
   words.json
   final_speech_text.md
@@ -192,7 +193,7 @@ output/<job_id>/
   subtitles.srt
   summary.md
   summary.json
-  artifacts/
+  artifacts/        # только временные diagnostics во время processing/failed retention
 ```
 
 ## Локальная установка

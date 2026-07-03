@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import threading
 import traceback
 from dataclasses import dataclass
@@ -28,6 +29,7 @@ from transcribe_doc.storage.artifact_store import (
     save_words,
 )
 from transcribe_doc.storage.paths import JobPaths
+from transcribe_doc.storage.temp_cleanup import cleanup_successful_job_media
 from transcribe_doc.summary.extractive import write_summary
 
 T = TypeVar("T")
@@ -129,12 +131,13 @@ def process_single_file(
     try:
         for stage in SINGLE_FILE_PIPELINE:
             stage(context)
+        _cleanup_successful_intermediates(context)
 
         return ProcessingResult(
             0,
             job,
             job_paths,
-            f"Job {job.job_id} wrote transcript to {job_paths.transcript_raw_json}",
+            f"Job {job.job_id} wrote transcript to {job_paths.segments_json}",
         )
     except Exception as error:
         failure_message = _public_failure_message(error)
@@ -281,6 +284,31 @@ def complete_job_stage(context: ProcessingContext) -> None:
 
     context.job.status = JobStatus.COMPLETED
     _emit(context, "done_ok")
+
+
+def _cleanup_successful_intermediates(context: ProcessingContext) -> None:
+    """Remove session artifacts after a completed job has durable outputs."""
+    if context.job.status not in {JobStatus.COMPLETED, JobStatus.COMPLETED_WITH_WARNINGS}:
+        return
+    try:
+        payload = json.loads(context.job_paths.job_json.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+    if not isinstance(payload, dict):
+        return
+    cleanup_successful_job_media(
+        payload,
+        output_root=context.job_paths.job_dir.parent,
+        job_id=context.job.job_id,
+        temp_root=Path(context.config.app.temp_dir),
+    )
+    context.job_paths.job_json.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    metadata = payload.get("metadata")
+    if isinstance(metadata, dict):
+        context.job.metadata.update(metadata)
 
 
 SINGLE_FILE_PIPELINE: tuple[Callable[[ProcessingContext], None], ...] = (

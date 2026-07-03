@@ -9,6 +9,35 @@ from pathlib import Path
 from transcribe_doc.service.types import JsonObject
 
 DEFAULT_TEMP_RETENTION_DAYS = 7
+
+# Compact durable artifacts are required for app history, transcript viewing, and
+# re-saving user-visible outputs. Everything else below is a job/session
+# intermediate or diagnostic snapshot that can be removed after a successful job.
+DURABLE_USER_ARTIFACTS = frozenset(
+    {
+        "segments_json",
+        "words_json",
+        "transcript_clean_txt",
+        "transcript_clean_md",
+        "final_speech_text_md",
+        "transcript_clean_docx",
+        "transcript_clean_pdf",
+        "subtitles_srt",
+        "summary_md",
+        "summary_json",
+    }
+)
+SUCCESS_INTERNAL_ARTIFACTS = frozenset(
+    {
+        "extracted_audio",
+        "normalized_audio",
+        "raw_transcript",
+        "diarization_dump",
+        "events_jsonl",
+        "log_file",
+        "config_snapshot",
+    }
+)
 MANAGED_MEDIA_ARTIFACTS = ("extracted_audio", "normalized_audio")
 STALE_JOB_STATUSES = {"failed", "failed_partial"}
 
@@ -46,16 +75,19 @@ def cleanup_successful_job_media(
     job_id: str,
     temp_root: Path,
 ) -> CleanupReport:
-    """Delete internal media for a completed job after its final Markdown was saved."""
+    """Delete job/session intermediates after durable successful outputs exist."""
     job_dir = output_root / job_id
     report = CleanupReport()
     deleted_artifact_fields: list[str] = []
-    for field_name, path in _job_media_candidates(job):
+    for field_name, path in _successful_job_cleanup_candidates(job):
         if not _is_managed_temporary_path(path, job_dir=job_dir, temp_root=temp_root):
             continue
         before = report.removed_count
+        existed_as_file = path.exists() and path.is_file()
         _delete_file(path, report)
-        if report.removed_count > before and field_name in MANAGED_MEDIA_ARTIFACTS:
+        deleted = report.removed_count > before
+        missing_internal_file = not existed_as_file and not path.exists()
+        if field_name in SUCCESS_INTERNAL_ARTIFACTS and (deleted or missing_internal_file):
             deleted_artifact_fields.append(field_name)
 
     artifacts = job.get("artifacts")
@@ -63,7 +95,7 @@ def cleanup_successful_job_media(
         for field_name in deleted_artifact_fields:
             artifacts[field_name] = None
         job["artifacts"] = artifacts
-    _record_cleanup_metadata(job, report, reason="final_markdown_saved")
+    _record_cleanup_metadata(job, report, reason="job_success")
     return report
 
 
@@ -130,6 +162,22 @@ def _job_media_candidates(job: JsonObject) -> list[tuple[str, Path]]:
     artifacts = job.get("artifacts")
     if isinstance(artifacts, dict):
         for field_name in MANAGED_MEDIA_ARTIFACTS:
+            value = artifacts.get(field_name)
+            if isinstance(value, str) and value.strip():
+                candidates.append((field_name, Path(value)))
+    source_paths = job.get("source_paths")
+    if isinstance(source_paths, list):
+        for value in source_paths:
+            if isinstance(value, str) and value.strip():
+                candidates.append(("source_paths", Path(value)))
+    return candidates
+
+
+def _successful_job_cleanup_candidates(job: JsonObject) -> list[tuple[str, Path]]:
+    candidates: list[tuple[str, Path]] = []
+    artifacts = job.get("artifacts")
+    if isinstance(artifacts, dict):
+        for field_name in sorted(SUCCESS_INTERNAL_ARTIFACTS):
             value = artifacts.get(field_name)
             if isinstance(value, str) and value.strip():
                 candidates.append((field_name, Path(value)))

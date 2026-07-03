@@ -277,6 +277,7 @@ def test_final_markdown_endpoint_saves_external_file_and_uses_title_download_nam
     saved = job_endpoints.save_final_markdown_endpoint(ctx, "job-local")
     status = job_endpoints.final_markdown_status_endpoint(ctx, "job-local")
     download = job_endpoints.artifact_download_endpoint(ctx, "job-local", "final_speech_text_md")
+    artifacts = job_endpoints.artifacts_endpoint(ctx, "job-local").payload["artifacts"]
 
     assert saved.payload["message"] == "Сохранено: Client call.md"
     assert (autosave_dir / "Client call.md").exists()
@@ -284,6 +285,7 @@ def test_final_markdown_endpoint_saves_external_file_and_uses_title_download_nam
     assert not normalized_audio_path.exists()
     assert status.payload["status"] == "saved"
     assert download.download_name == "Client call.md"
+    assert [artifact["name"] for artifact in artifacts] == ["final_speech_text_md"]
 
 
 def test_post_jobs_uses_shared_processing_entrypoint(tmp_path: Path, monkeypatch) -> None:

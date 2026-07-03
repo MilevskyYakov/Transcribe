@@ -57,10 +57,8 @@ def test_process_single_file_records_canonical_stage_order(tmp_path: Path, monke
 
     assert result.exit_code == 0
     assert result.job_paths is not None
-    events = [
-        json.loads(line)
-        for line in result.job_paths.events_jsonl.read_text(encoding="utf-8").splitlines()
-    ]
+    persisted_job = json.loads(result.job_paths.job_json.read_text(encoding="utf-8"))
+    events = persisted_job["metadata"]["events"]
     assert [(event["stage"], event["progress"]) for event in events] == [
         ("queued", 0),
         ("processing", 5),
@@ -78,6 +76,11 @@ def test_process_single_file_records_canonical_stage_order(tmp_path: Path, monke
     assert result.job is not None
     assert result.job.status.value == "completed"
     assert result.job.detected_language == "ru"
+    assert persisted_job["metadata"]["temp_cleanup"]["reason"] == "job_success"
+    assert persisted_job["artifacts"]["normalized_audio"] is None
+    assert not result.job_paths.normalized_audio.exists()
+    assert not result.job_paths.events_jsonl.exists()
+    assert (result.job_paths.job_dir / "transcript_clean.txt").exists()
 
 
 def test_process_single_file_failure_uses_last_stage_progress(tmp_path: Path, monkeypatch) -> None:

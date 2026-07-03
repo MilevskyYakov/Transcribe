@@ -71,14 +71,17 @@ def test_run_command_completes_with_fake_media_tools(run_cli: RunCommandHarness)
 
     assert exit_code == 0
     job_dir = run_cli.single_job_dir()
-    assert (job_dir / "artifacts" / "normalized_audio.wav").exists()
-    assert (job_dir / "transcript_raw.json").exists()
+    assert not (job_dir / "artifacts" / "normalized_audio.wav").exists()
+    assert not (job_dir / "transcript_raw.json").exists()
     assert (job_dir / "segments.json").exists()
     assert (job_dir / "words.json").exists()
 
     job_payload = run_cli.job_payload()
     assert job_payload["status"] == "completed"
     assert job_payload["warnings"] == []
+    assert job_payload["artifacts"]["normalized_audio"] is None
+    assert job_payload["artifacts"]["raw_transcript"] is None
+    assert job_payload["metadata"]["temp_cleanup"]["reason"] == "job_success"
 
 
 def test_run_command_writes_transcript_artifact_when_asr_backend_available(
@@ -102,13 +105,11 @@ def test_run_command_writes_transcript_artifact_when_asr_backend_available(
     exit_code = run_cli.run()
 
     assert exit_code == 0
-    transcript_payload = run_cli.read_json("transcript_raw.json")
-    assert transcript_payload["segments"][0]["text_raw"] == "  привет   мир "
-    assert transcript_payload["segments"][0]["text_clean"] == "Привет мир."
-    assert transcript_payload["segments"][0]["words"][0]["text"] == "привет"
-    assert transcript_payload["detected_language"] == "ru"
+    assert not (run_cli.single_job_dir() / "transcript_raw.json").exists()
 
     segments_payload = run_cli.read_json("segments.json")
+    assert segments_payload[0]["text_raw"] == "  привет   мир "
+    assert segments_payload[0]["text_clean"] == "Привет мир."
     assert segments_payload[0]["speaker_label"] == "SPEAKER_00"
 
     words_payload = run_cli.read_json("words.json")
@@ -121,6 +122,7 @@ def test_run_command_writes_transcript_artifact_when_asr_backend_available(
     job_payload = run_cli.job_payload()
     assert job_payload["status"] == "completed"
     assert job_payload["detected_language"] == "ru"
+    assert job_payload["artifacts"]["raw_transcript"] is None
 
 
 def test_run_command_maps_single_expected_speaker_from_manifest(
@@ -172,13 +174,10 @@ def test_run_command_maps_two_expected_speakers_across_multiple_segments(
 
     job_dir = run_cli.single_job_dir()
     diarization_dump_path = job_dir / "artifacts" / "diarization_dump.json"
-    assert diarization_dump_path.exists()
-
-    diarization_dump = run_cli.read_json("artifacts/diarization_dump.json")
-    assert [segment["speaker_label"] for segment in diarization_dump] == ["SPEAKER_00", "SPEAKER_01"]
+    assert not diarization_dump_path.exists()
 
     job_payload = run_cli.job_payload()
-    assert job_payload["artifacts"]["diarization_dump"] == str(diarization_dump_path)
+    assert job_payload["artifacts"]["diarization_dump"] is None
 
 
 def test_run_command_stores_low_diarization_quality_without_warning_status(
