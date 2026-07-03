@@ -73,6 +73,65 @@ textarea {
   gap: 12px;
 }
 
+.app-logo-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 48px;
+  width: 48px;
+  height: 48px;
+  border: 1px solid rgba(24, 35, 31, 0.08);
+  border-radius: 16px;
+  background: linear-gradient(135deg, #ffffff 0%, #f4eee4 100%);
+  box-shadow: 0 14px 32px rgba(30, 44, 38, 0.12);
+}
+
+.app-logo-mark svg {
+  width: 38px;
+  height: 38px;
+}
+
+.logo-page {
+  fill: #fffef9;
+  stroke: rgba(24, 35, 31, 0.18);
+  stroke-width: 1.5;
+}
+
+.logo-fold {
+  fill: #e6eee8;
+  stroke: rgba(24, 35, 31, 0.18);
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
+
+.logo-line {
+  fill: none;
+  stroke: #cfd9d2;
+  stroke-linecap: round;
+  stroke-width: 2;
+}
+
+.logo-wave {
+  fill: none;
+  stroke-linecap: round;
+  stroke-width: 4;
+}
+
+.logo-wave-blue {
+  stroke: var(--blue);
+}
+
+.logo-wave-orange {
+  stroke: var(--accent);
+}
+
+.logo-wave-strong {
+  stroke: var(--accent-strong);
+}
+
+.logo-wave-green {
+  stroke: var(--green);
+}
+
 .brand-block h1,
 .workspace-header h2,
 .pane-title h3 {

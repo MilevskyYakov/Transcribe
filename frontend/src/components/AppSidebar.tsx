@@ -1,4 +1,4 @@
-import { FileText, RefreshCw, Server, Settings, SlidersHorizontal } from "lucide-react";
+import { RefreshCw, Server, Settings, SlidersHorizontal } from "lucide-react";
 import type { BackendLifecycle, Job } from "../types";
 import {
   backendLifecycleLabel,
@@ -75,7 +75,18 @@ export function AppSidebar({
   return (
     <aside className="job-rail">
       <div className="brand-block">
-        <FileText size={24} />
+        <span className="app-logo-mark" aria-hidden="true">
+          <svg viewBox="0 0 64 64" role="img">
+            <rect className="logo-page" x="20" y="10" width="28" height="44" rx="5" />
+            <path className="logo-fold" d="M40 10v9h8" />
+            <path className="logo-line" d="M25 24h18M25 30h14M25 36h18" />
+            <path className="logo-wave logo-wave-blue" d="M18 43v-8" />
+            <path className="logo-wave logo-wave-orange" d="M25 47V31" />
+            <path className="logo-wave logo-wave-strong" d="M32 51V27" />
+            <path className="logo-wave logo-wave-orange" d="M39 47V31" />
+            <path className="logo-wave logo-wave-green" d="M46 43v-8" />
+          </svg>
+        </span>
         <div>
           <h1>Транскрибация</h1>
           <p>Локальная панель</p>
