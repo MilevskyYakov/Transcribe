@@ -14,6 +14,14 @@ import {
   saveDefaultModel
 } from "./appEnvironment";
 import {
+  checkForAppUpdate,
+  initialUpdateState,
+  reduceDownloadEvent,
+  updateMessageForError,
+  type PendingUpdate,
+  type UpdateState
+} from "./appUpdates";
+import {
   canChooseModelAsDefault,
   canSubmitTranscriptionJob,
   canStartWithDefaultModel,
@@ -75,6 +83,14 @@ export {
   titleFromFilename,
   type SpeakerTurn
 } from "./appViewModel";
+export {
+  canRunUpdateAction,
+  initialUpdateState,
+  reduceDownloadEvent,
+  updateActionLabel,
+  updateProgressLabel,
+  updateStatusTone
+} from "./appUpdates";
 
 export function App() {
   const [apiBase, setApiBase] = useState(
@@ -105,6 +121,8 @@ export function App() {
   const [notice, setNotice] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [models, setModels] = useState<ModelsPayload | null>(null);
+  const [updateState, setUpdateState] = useState<UpdateState>(initialUpdateState);
+  const [pendingUpdate, setPendingUpdate] = useState<PendingUpdate | null>(null);
 
   const client = useMemo(() => new ApiClient(normalizeBaseUrl(apiBase)), [apiBase]);
   const selectedJob = jobs.find((job) => job.job_id === selectedJobId) ?? null;
@@ -523,6 +541,61 @@ export function App() {
     }
   }
 
+  async function handleUpdateAction() {
+    if (!isManagedApp) {
+      setUpdateState({ status: "error", message: "Обновление доступно только в установленном app." });
+      return;
+    }
+    if (pendingUpdate) {
+      setUpdateState((current) => ({
+        ...current,
+        status: "downloading",
+        message: "Скачиваю и проверяю подписанное обновление…",
+        downloadedBytes: 0,
+        totalBytes: null
+      }));
+      try {
+        await pendingUpdate.downloadAndInstall((event) => {
+          setUpdateState((current) => reduceDownloadEvent(current, event));
+        });
+        setPendingUpdate(null);
+        setUpdateState({
+          status: "installed",
+          version: pendingUpdate.version,
+          currentVersion: pendingUpdate.currentVersion,
+          message: "Обновление установлено. Перезапустите приложение, чтобы открыть новую версию."
+        });
+      } catch (error) {
+        setUpdateState({
+          status: "error",
+          version: pendingUpdate.version,
+          currentVersion: pendingUpdate.currentVersion,
+          message: updateMessageForError(error)
+        });
+      }
+      return;
+    }
+
+    setUpdateState({ status: "checking", message: "Проверяю release endpoint…" });
+    try {
+      const update = await checkForAppUpdate();
+      if (!update) {
+        setUpdateState({ status: "not-available", message: "Установлена последняя версия." });
+        return;
+      }
+      setPendingUpdate(update);
+      setUpdateState({
+        status: "available",
+        version: update.version,
+        currentVersion: update.currentVersion,
+        notes: update.notes,
+        message: `Доступна версия ${update.version}. Обновление будет проверено подписью перед установкой.`
+      });
+    } catch (error) {
+      setUpdateState({ status: "error", message: updateMessageForError(error) });
+    }
+  }
+
   return (
     <main className="app-shell">
       <AppSidebar
@@ -539,6 +612,7 @@ export function App() {
         outputDir={outputDir}
         selectedJobId={selectedJobId}
         selectedModelTitle={selectedModelTitle}
+        updateState={updateState}
         watchFolder={watchFolder}
         onApiBaseChange={setApiBase}
         onBatchPathsChange={setBatchPaths}
@@ -546,6 +620,7 @@ export function App() {
         onRefresh={() => void refresh()}
         onRetryBackendStart={() => void retryBackendStart()}
         onSelectJob={setSelectedJobId}
+        onUpdateAction={() => void handleUpdateAction()}
         onCleanupTemp={() => void cleanupTemporaryFiles()}
         onSubmitBatch={() => void submitBatch()}
         onSubmitWatchScan={() => void submitWatchScan()}

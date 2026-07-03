@@ -477,18 +477,52 @@ textarea {
   padding: 14px;
 }
 
-.default-model-card span {
+.update-card {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #d4dbd6;
+  border-left: 3px solid #b9c4bd;
+  background: #ffffff;
+  padding: 14px;
+}
+
+.update-card.ok {
+  border-left-color: #1f9d64;
+}
+
+.update-card.warn {
+  border-left-color: #d98a16;
+}
+
+.update-card.error {
+  border-left-color: #c64242;
+}
+
+.update-card.checking {
+  border-left-color: #4b7bec;
+}
+
+.default-model-card span,
+.update-card span {
   display: block;
   color: #66736e;
   font-size: 12px;
   font-weight: 800;
 }
 
-.default-model-card strong {
+.default-model-card strong,
+.update-card strong {
   display: block;
   margin-top: 4px;
   overflow-wrap: anywhere;
   font-size: 20px;
+}
+
+.update-card p {
+  margin: 6px 0 0;
+  color: #51615a;
+  font-size: 13px;
+  line-height: 1.35;
 }
 
 .connection-details {
