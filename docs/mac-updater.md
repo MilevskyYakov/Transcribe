@@ -7,7 +7,7 @@ Transcribe Doc uses the Tauri v2 updater for the packaged macOS app. The updater
 Default endpoint in `frontend/src-tauri/tauri.conf.json`:
 
 ```text
-https://github.com/kairosUNIVERSAL/Transcribe/releases/latest/download/latest.json
+https://github.com/MilevskyYakov/Transcribe/releases/latest/download/latest.json
 ```
 
 The default strategy is a static `latest.json` attached to the latest GitHub Release. If this project later moves to a dedicated HTTPS update server, keep TLS enabled and update only the `plugins.updater.endpoints` list.
@@ -57,7 +57,7 @@ For Apple Silicon macOS, attach a `latest.json` similar to:
   "platforms": {
     "darwin-aarch64": {
       "signature": "CONTENTS_OF_Transcribe Doc.app.tar.gz.sig",
-      "url": "https://github.com/kairosUNIVERSAL/Transcribe/releases/download/v0.2.0/Transcribe%20Doc.app.tar.gz"
+      "url": "https://github.com/MilevskyYakov/Transcribe/releases/download/v0.2.0/Transcribe%20Doc.app.tar.gz"
     }
   }
 }
