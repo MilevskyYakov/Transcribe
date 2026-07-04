@@ -2,6 +2,19 @@
 
 Проект предназначен для локальной обработки аудио- и видеофайлов на macOS Apple Silicon с получением почти дословного транскрипта, diarization, summary и экспортов в несколько форматов.
 
+## Download
+
+Latest macOS Apple Silicon build:
+
+- [Download the latest release](https://github.com/kairosUNIVERSAL/Transcribe/releases/latest)
+- Direct updater feed: `https://github.com/kairosUNIVERSAL/Transcribe/releases/latest/download/latest.json`
+
+The public release is a local-first desktop app. It runs the transcription backend on your Mac and stores downloaded ASR models, settings, transcripts, and job history in the app-managed local data area.
+
+Current distribution note: builds are signed for the Tauri updater, but public macOS code signing/notarization may still require an extra Gatekeeper confirmation on first launch.
+
+Privacy note: do not upload private audio/video, transcripts, API keys, or updater signing keys to public GitHub Issues. See `SECURITY.md`.
+
 ## Что делает проект
 
 Система принимает медиафайл или набор файлов, извлекает и нормализует аудио, распознаёт речь, определяет смены спикеров, собирает структурированный transcript и сохраняет результат в человекочитаемом и техническом виде.
