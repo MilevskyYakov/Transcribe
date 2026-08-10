@@ -209,6 +209,7 @@ def test_speaker_review_endpoint_persists_assignment_and_saves_markdown(tmp_path
         job_dir / "job.json",
     )
     autosave_dir = tmp_path / "saved"
+    autosave_dir.mkdir()
     ctx = SimpleNamespace(
         app_config=AppConfig(app=AppSection(output_dir=str(output_root), temp_dir=str(temp_root))),
         output_root=output_root,
@@ -241,8 +242,10 @@ def test_final_markdown_endpoint_saves_external_file_and_uses_title_download_nam
     job_dir = output_root / "job-local"
     artifacts_dir = job_dir / "artifacts"
     uploads_dir = temp_root / "uploads"
+    autosave_dir = tmp_path / "saved"
     artifacts_dir.mkdir(parents=True)
     uploads_dir.mkdir(parents=True)
+    autosave_dir.mkdir()
     segments_path = job_dir / "segments.json"
     final_text_path = job_dir / "final_speech_text.md"
     uploaded_source_path = uploads_dir / "source.wav"
@@ -263,15 +266,14 @@ def test_final_markdown_endpoint_saves_external_file_and_uses_title_download_nam
                 final_speech_text_md=str(final_text_path),
                 normalized_audio=str(normalized_audio_path),
             ),
-            metadata={"display_title": "Client call"},
+            metadata={"display_title": "Client call", "final_markdown_dir": str(autosave_dir)},
         ),
         job_dir / "job.json",
     )
-    autosave_dir = tmp_path / "saved"
     ctx = SimpleNamespace(
         app_config=AppConfig(app=AppSection(output_dir=str(output_root), temp_dir=str(temp_root))),
         output_root=output_root,
-        read_json_object=lambda: {"autosave_dir": str(autosave_dir)},
+        read_json_object=lambda: {},
     )
 
     saved = job_endpoints.save_final_markdown_endpoint(ctx, "job-local")
@@ -301,6 +303,7 @@ def test_post_jobs_uses_shared_processing_entrypoint(tmp_path: Path, monkeypatch
         config,
         job_id=None,
         display_title=None,
+        initial_metadata=None,
         speaker_manifest_path=None,
         speaker_hint=None,
         formats=None,
@@ -326,9 +329,15 @@ def test_post_jobs_uses_shared_processing_entrypoint(tmp_path: Path, monkeypatch
     base_url = f"http://127.0.0.1:{httpd.server_port}"
 
     try:
+        final_markdown_dir = tmp_path / "final"
+        final_markdown_dir.mkdir()
         response = _post_json(
             f"{base_url}/jobs",
-            {"input_path": str(source_file), "display_title": "Client sync"},
+            {
+                "input_path": str(source_file),
+                "display_title": "Client sync",
+                "final_markdown_dir": str(final_markdown_dir),
+            },
         )
     finally:
         httpd.shutdown()
@@ -339,6 +348,7 @@ def test_post_jobs_uses_shared_processing_entrypoint(tmp_path: Path, monkeypatch
     assert response["job"]["status"] == "queued"
     assert response["job"]["metadata"]["display_title"] == "Client sync"
     assert response["job"]["metadata"]["source_filename"] == "sample.wav"
+    assert response["job"]["metadata"]["final_markdown_dir"] == str(final_markdown_dir)
     assert response["message"].endswith("queued")
 
 
@@ -406,6 +416,7 @@ def test_multipart_payload_parser_stores_uploads(tmp_path: Path) -> None:
         media=SimpleNamespace(filename="source.wav", file=BytesIO(b"audio")),
         speaker_hint=SimpleNamespace(value="Яков"),
         title=SimpleNamespace(value="Planning sync"),
+        final_markdown_dir=SimpleNamespace(value="/Users/demo/Documents"),
         speaker_manifest=SimpleNamespace(filename="speakers.json", file=BytesIO(b"{}")),
     )
 
@@ -414,6 +425,7 @@ def test_multipart_payload_parser_stores_uploads(tmp_path: Path) -> None:
     assert Path(str(payload["input_path"])).read_bytes() == b"audio"
     assert payload["speaker_hint"] == "Яков"
     assert payload["display_title"] == "Planning sync"
+    assert payload["final_markdown_dir"] == "/Users/demo/Documents"
     assert Path(str(payload["speaker_manifest_path"])).read_bytes() == b"{}"
 
 

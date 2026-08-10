@@ -85,7 +85,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus
 .sidebar-empty { margin: 8px 10px; color: var(--muted); font-size: 12px; }
 .settings-entry { margin-top: auto; width: 100%; }
 
-.workspace { min-width: 0; padding: clamp(28px, 5vw, 64px); }
+.workspace { min-width: 0; padding: clamp(28px, 5vw, 64px); transition: background .15s, box-shadow .15s; }
+.workspace.is-drag-active { background: var(--blue-soft); box-shadow: inset 0 0 0 2px var(--blue); }
 .workspace > section { width: min(100%, 1080px); margin: 0 auto; }
 .screen-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 40px; }
 .screen-header h1, .backend-problem-screen h1 {
@@ -130,22 +131,24 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus
   border: 1px dashed #aab0bf;
   border-radius: 8px;
   background: var(--surface);
-  cursor: pointer;
+  cursor: default;
   text-align: center;
   transition: border-color .15s, background .15s;
 }
 .drop-surface.is-drag-active { border: 2px solid var(--blue); background: var(--blue-soft); }
 .drop-surface.has-error { border-color: var(--error); }
 .drop-surface.has-file { min-height: 220px; border-style: solid; }
-.drop-surface input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.drop-surface input { position: absolute; width: 1px; height: 1px; opacity: 0; }
 .drop-surface strong { z-index: 1; max-width: 70%; overflow-wrap: anywhere; font-size: 20px; }
 .drop-surface small { z-index: 1; color: var(--muted); }
 .drop-icon { z-index: 1; color: var(--blue); }
-.file-button { z-index: 1; pointer-events: none; }
+.file-button { position: relative; z-index: 1; }
 .editorial-cut { position: absolute; right: -40px; bottom: -80px; width: 260px; height: 220px; background: var(--coral); clip-path: polygon(38% 0, 100% 0, 100% 100%, 0 100%); opacity: .92; }
 .drop-surface.has-file .editorial-cut { width: 120px; height: 110px; right: -24px; bottom: -42px; }
 .inline-error { margin: 10px 0 0; color: var(--error); font-size: 13px; }
 .file-setup { position: relative; display: grid; gap: 20px; border-top: 1px solid var(--line); background: var(--surface); padding: 24px; }
+.batch-entry-copy { margin: 0; color: var(--muted); }
+.open-settings-link { width: fit-content; margin-left: 36px; }
 .remove-file { position: absolute; top: 18px; right: 18px; display: inline-flex; align-items: center; gap: 5px; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
 .destination-row { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding-right: 90px; }
 .destination-row span, .destination-row small, .destination-row strong { display: block; min-width: 0; }

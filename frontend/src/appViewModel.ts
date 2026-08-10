@@ -128,13 +128,13 @@ export function titleValidationMessage(title: string): string | null {
 }
 
 export function canSubmitTranscriptionJob(options: {
-  mediaFile: File | null;
+  hasMedia: boolean;
   transcriptionTitle: string;
   isSubmitting: boolean;
   selectedModelIsReady: boolean;
 }): boolean {
   return (
-    Boolean(options.mediaFile) &&
+    options.hasMedia &&
     !options.isSubmitting &&
     options.selectedModelIsReady &&
     titleValidationMessage(options.transcriptionTitle) === null

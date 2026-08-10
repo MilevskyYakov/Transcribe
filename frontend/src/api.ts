@@ -118,12 +118,28 @@ export class ApiClient {
   }
 
   async createJob(
-    media: File,
+    media: File | string,
     displayTitle?: string,
     speakerHint?: string,
     asrBackend?: string,
-    asrModelName?: string
+    asrModelName?: string,
+    finalMarkdownDir?: string
   ): Promise<Job | null> {
+    if (typeof media === "string") {
+      const response = await fetch(`${this.baseUrl}/jobs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          input_path: media,
+          display_title: displayTitle?.trim() || undefined,
+          speaker_hint: speakerHint?.trim() || undefined,
+          asr_backend: asrBackend,
+          asr_model_name: asrModelName,
+          final_markdown_dir: finalMarkdownDir
+        })
+      });
+      return this.parseResponse<{ job: Job | null }>(response).then((payload) => payload.job);
+    }
     const formData = new FormData();
     formData.append("media", media);
     if (displayTitle?.trim()) {
@@ -137,6 +153,9 @@ export class ApiClient {
     }
     if (asrModelName) {
       formData.append("asr_model_name", asrModelName);
+    }
+    if (finalMarkdownDir) {
+      formData.append("final_markdown_dir", finalMarkdownDir);
     }
     const response = await fetch(`${this.baseUrl}/jobs`, {
       method: "POST",

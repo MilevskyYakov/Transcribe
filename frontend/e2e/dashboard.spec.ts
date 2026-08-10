@@ -59,6 +59,36 @@ test("launch, selected file, history, result and settings keep one workspace sta
   await expect(page.getByRole("heading", { name: "Автоматизация" })).toBeVisible();
 });
 
+test("workspace drop accepts media, preserves selection on errors, and hands multiple files to batch", async ({ page }) => {
+  await mockApp(page, []);
+  await page.goto("/");
+  const workspace = page.locator(".workspace");
+  const dropFiles = (files: { name: string; type: string }[]) => workspace.evaluate((element, entries) => {
+    const transfer = new DataTransfer();
+    for (const entry of entries) transfer.items.add(new File(["media"], entry.name, { type: entry.type }));
+    element.dispatchEvent(new DragEvent("dragenter", { bubbles: true, dataTransfer: transfer }));
+    element.dispatchEvent(new DragEvent("drop", { bubbles: true, dataTransfer: transfer }));
+  }, files);
+
+  await dropFiles([{ name: "Первый.m4a", type: "audio/mp4" }]);
+  await expect(page.getByText("Первый.m4a")).toBeVisible();
+
+  await dropFiles([{ name: "Второй.mov", type: "video/quicktime" }]);
+  await expect(page.getByText("Второй.mov")).toBeVisible();
+  await expect(page.getByText("Первый.m4a")).toHaveCount(0);
+
+  await dropFiles([{ name: "notes.txt", type: "text/plain" }]);
+  await expect(page.getByText("Второй.mov")).toBeVisible();
+  await expect(page.getByText("Этот тип файла не поддерживается. Выберите аудио или видео файл.")).toBeVisible();
+
+  await dropFiles([
+    { name: "one.wav", type: "audio/wav" },
+    { name: "two.mp3", type: "audio/mpeg" }
+  ]);
+  await expect(page.getByText("Пакет · 2 файла", { exact: true })).toBeVisible();
+  await expect(page.getByText("Файлы переданы в пакетную сессию")).toBeVisible();
+});
+
 test("processing and error jobs open dedicated states while remaining in history", async ({ page }) => {
   const processing = { ...completedJob, job_id: "job-processing", status: "processing", metadata: { display_title: "Интервью", progress: 68, last_message: "Распознаём речь" }, artifacts: {} };
   const failed = { ...completedJob, job_id: "job-failed", status: "failed", metadata: { display_title: "Сломанная запись", progress: 35 }, warnings: ["[ONNXRuntimeError] raw failure"], artifacts: {} };

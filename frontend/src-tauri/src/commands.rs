@@ -2,6 +2,7 @@ use crate::{
     backend::{binary_path, AppBootstrap, BackendLifecycleSnapshot, BackendState},
     settings::{save_settings, AppSettings},
 };
+use std::path::Path;
 
 #[tauri::command]
 pub(crate) fn app_bootstrap(state: tauri::State<'_, BackendState>) -> AppBootstrap {
@@ -36,6 +37,11 @@ pub(crate) fn app_bootstrap(state: tauri::State<'_, BackendState>) -> AppBootstr
 #[tauri::command]
 pub(crate) fn backend_status(state: tauri::State<'_, BackendState>) -> BackendLifecycleSnapshot {
     state.lifecycle()
+}
+
+#[tauri::command]
+pub(crate) fn is_regular_file_path(path: String) -> bool {
+    Path::new(&path).is_file()
 }
 
 #[tauri::command]

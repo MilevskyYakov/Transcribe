@@ -65,6 +65,7 @@ def payload_from_multipart_form(form: Any, upload_root: Path) -> JsonObject:
         ("speaker_hint", "speaker_hint"),
         ("asr_backend", "asr_backend"),
         ("asr_model_name", "asr_model_name"),
+        ("final_markdown_dir", "final_markdown_dir"),
     ]:
         value = field_value(form, field_name)
         if value:

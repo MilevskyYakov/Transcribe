@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isSupportedMediaFile, UPLOAD_UNSUPPORTED_MEDIA_MESSAGE } from "./components/UploadPanel";
+import { filenameFromPath, isSupportedMediaFile, UPLOAD_UNSUPPORTED_MEDIA_MESSAGE } from "./components/UploadPanel";
 
 describe("upload file validation", () => {
   it("accepts the backend-supported audio and video extensions even without a MIME type", () => {
@@ -23,5 +23,10 @@ describe("upload file validation", () => {
     expect(UPLOAD_UNSUPPORTED_MEDIA_MESSAGE).toBe(
       "Этот тип файла не поддерживается. Выберите аудио или видео файл."
     );
+  });
+
+  it("keeps native path names portable across path separators", () => {
+    expect(filenameFromPath("/Users/demo/meeting.m4a")).toBe("meeting.m4a");
+    expect(filenameFromPath("C:\\Recordings\\call.mov")).toBe("call.mov");
   });
 });

@@ -1,13 +1,14 @@
 import { FileAudio, FolderOpen, Play, Upload, X } from "lucide-react";
-import { useState } from "react";
-import type { DragEvent, FormEvent } from "react";
+import type { FormEvent } from "react";
 
 export const UPLOAD_UNSUPPORTED_MEDIA_MESSAGE =
   "Этот тип файла не поддерживается. Выберите аудио или видео файл.";
 
-const SUPPORTED_MEDIA_EXTENSIONS = new Set([
+export const SUPPORTED_MEDIA_EXTENSIONS = [
   "mp3", "wav", "m4a", "aac", "flac", "ogg", "mp4", "mov", "mkv", "avi", "webm"
-]);
+] as const;
+
+const SUPPORTED_MEDIA_EXTENSION_SET = new Set<string>(SUPPORTED_MEDIA_EXTENSIONS);
 
 const SUPPORTED_MEDIA_ACCEPT = [
   "audio/*",
@@ -17,66 +18,58 @@ const SUPPORTED_MEDIA_ACCEPT = [
 
 export function isSupportedMediaFile(file: Pick<File, "name" | "type">): boolean {
   if (file.type.startsWith("audio/") || file.type.startsWith("video/")) return true;
-  return SUPPORTED_MEDIA_EXTENSIONS.has(file.name.split(".").pop()?.toLowerCase() ?? "");
+  return SUPPORTED_MEDIA_EXTENSION_SET.has(file.name.split(".").pop()?.toLowerCase() ?? "");
+}
+
+export function filenameFromPath(path: string): string {
+  return path.split(/[\\/]/).pop() || path;
 }
 
 interface UploadPanelProps {
-  autosaveMarkdownDir: string | null;
+  batchFilenames: string[];
   canSubmitJob: boolean;
   isSubmitting: boolean;
-  mediaFile: File | null;
+  isDragActive: boolean;
+  isTauri: boolean;
+  mediaFilename: string | null;
+  outputDirectory: string | null;
   selectedModelIsReady: boolean;
   selectedModelStatusText: string;
   selectedModelTitle: string;
-  onMediaFileChange: (file: File | null) => void;
+  uploadError: string | null;
+  onChooseFiles: () => void;
+  onChooseOutputDirectory: () => void;
+  onClearSelection: () => void;
+  onFilesSelected: (files: File[]) => void;
   onOpenSettings: () => void;
   onSubmitJob: (event: FormEvent) => void;
 }
 
 export function UploadPanel({
-  autosaveMarkdownDir,
+  batchFilenames,
   canSubmitJob,
   isSubmitting,
-  mediaFile,
+  isDragActive,
+  isTauri,
+  mediaFilename,
+  outputDirectory,
   selectedModelIsReady,
   selectedModelStatusText,
   selectedModelTitle,
-  onMediaFileChange,
+  uploadError,
+  onChooseFiles,
+  onChooseOutputDirectory,
+  onClearSelection,
+  onFilesSelected,
   onOpenSettings,
   onSubmitJob
 }: UploadPanelProps) {
-  const [isDragActive, setIsDragActive] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-
-  function selectMediaFile(file: File | null) {
-    if (file && !isSupportedMediaFile(file)) {
-      setUploadError(UPLOAD_UNSUPPORTED_MEDIA_MESSAGE);
-      return;
-    }
-    setUploadError(null);
-    onMediaFileChange(file);
-  }
-
-  function handleDrag(event: DragEvent<HTMLLabelElement>) {
-    event.preventDefault();
-    event.stopPropagation();
-    event.dataTransfer.dropEffect = "copy";
-  }
-
-  function handleDragLeave(event: DragEvent<HTMLLabelElement>) {
-    handleDrag(event);
-    const nextTarget = event.relatedTarget instanceof Node ? event.relatedTarget : null;
-    if (!nextTarget || !event.currentTarget.contains(nextTarget)) setIsDragActive(false);
-  }
-
-  function handleDrop(event: DragEvent<HTMLLabelElement>) {
-    handleDrag(event);
-    setIsDragActive(false);
-    selectMediaFile(event.dataTransfer.files.item(0));
-  }
+  const hasSelection = Boolean(mediaFilename) || batchFilenames.length > 0;
+  const batchLabel = batchFilenames.length === 2 ? "2 файла" : `${batchFilenames.length} файлов`;
+  const primaryFilename = mediaFilename ?? (batchFilenames.length ? `Пакет · ${batchLabel}` : null);
 
   return (
-    <form className={`new-transcription-screen${mediaFile ? " has-file" : ""}`} onSubmit={onSubmitJob}>
+    <form className={`new-transcription-screen${hasSelection ? " has-file" : ""}`} onSubmit={onSubmitJob}>
       <header className="screen-header">
         <div>
           <p className="eyebrow">Mnema</p>
@@ -85,36 +78,33 @@ export function UploadPanel({
         </div>
       </header>
 
-      <label
-        className={`drop-surface${isDragActive ? " is-drag-active" : ""}${uploadError ? " has-error" : ""}${mediaFile ? " has-file" : ""}`}
-        onDragEnter={(event) => { handleDrag(event); setIsDragActive(true); }}
-        onDragOver={handleDrag}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-      >
+      <div className={`drop-surface${isDragActive ? " is-drag-active" : ""}${uploadError ? " has-error" : ""}${hasSelection ? " has-file" : ""}`}>
         <span className="editorial-cut" aria-hidden="true" />
-        {mediaFile ? <FileAudio className="drop-icon" size={34} /> : <Upload className="drop-icon" size={34} />}
-        <strong>{isDragActive ? "Отпустите файлы здесь" : mediaFile?.name ?? "Перетащите записи сюда"}</strong>
-        <small>{mediaFile ? "Файл готов к обработке" : "Можно добавить один или несколько файлов"}</small>
-        {!mediaFile && <span className="secondary-button file-button">Выбрать файлы</span>}
-        <input
-          aria-label="Выбрать файл"
-          type="file"
-          accept={SUPPORTED_MEDIA_ACCEPT}
-          onChange={(event) => selectMediaFile(event.target.files?.[0] ?? null)}
-        />
-      </label>
+        {hasSelection ? <FileAudio className="drop-icon" size={34} /> : <Upload className="drop-icon" size={34} />}
+        <strong>{isDragActive ? "Отпустите файлы здесь" : primaryFilename ?? "Перетащите записи сюда"}</strong>
+        <small>{batchFilenames.length ? "Файлы переданы в пакетную сессию" : mediaFilename ? "Файл готов к обработке" : "Можно добавить один или несколько файлов"}</small>
+        {isTauri ? (
+          <button className="secondary-button file-button" type="button" onClick={onChooseFiles}>Выбрать файлы</button>
+        ) : (
+          <label className="secondary-button file-button">
+            Выбрать файлы
+            <input aria-label="Выбрать файл" type="file" multiple accept={SUPPORTED_MEDIA_ACCEPT} onChange={(event) => onFilesSelected(Array.from(event.target.files ?? []))} />
+          </label>
+        )}
+      </div>
 
       {uploadError && <p className="inline-error" role="alert">{uploadError}</p>}
 
-      {mediaFile && (
+      {hasSelection && (
         <section className="file-setup">
-          <button className="remove-file" aria-label="Убрать файл" type="button" onClick={() => selectMediaFile(null)}><X size={16} /> Убрать</button>
+          <button className="remove-file" aria-label="Убрать файл" type="button" onClick={onClearSelection}><X size={16} /> Убрать</button>
+          {batchFilenames.length > 0 && <p className="batch-entry-copy">Пакет · {batchLabel}. Настройка очереди продолжится в пакетном экране.</p>}
           <div className="destination-row">
             <FolderOpen size={18} />
-            <span><small>Сохранить в</small><strong>{autosaveMarkdownDir ?? "Папка не выбрана"}</strong></span>
-            <button className="text-button" type="button" onClick={onOpenSettings}>{autosaveMarkdownDir ? "Изменить в настройках" : "Выбрать папку"}</button>
+            <span><small>Сохранить в</small><strong>{outputDirectory ?? "Папка не выбрана"}</strong></span>
+            <button className="text-button" type="button" onClick={onChooseOutputDirectory}>{outputDirectory ? "Изменить" : "Выбрать папку"}</button>
           </div>
+          {!outputDirectory && <button className="text-button open-settings-link" type="button" onClick={onOpenSettings}>Открыть настройки</button>}
           {!selectedModelIsReady && (
             <div className="model-problem" role="status">
               <strong>Модель распознавания не готова</strong>
@@ -124,7 +114,7 @@ export function UploadPanel({
           )}
           <div className="setup-actions">
             <span className="model-caption">Модель: {selectedModelTitle}</span>
-            <button className="primary-button" disabled={!canSubmitJob || !autosaveMarkdownDir} type="submit">
+            <button className="primary-button" disabled={!canSubmitJob || !outputDirectory || batchFilenames.length > 0} type="submit">
               <Play size={17} /> {isSubmitting ? "Запускаю…" : "Начать транскрибацию"}
             </button>
           </div>

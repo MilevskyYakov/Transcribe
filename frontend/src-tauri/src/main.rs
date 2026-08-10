@@ -20,6 +20,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             commands::app_bootstrap,
             commands::backend_status,
+            commands::is_regular_file_path,
             commands::mark_backend_offline,
             commands::mark_backend_online,
             commands::restart_backend,
