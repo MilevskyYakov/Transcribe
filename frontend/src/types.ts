@@ -50,6 +50,7 @@ export interface JobMetadata {
   saved_markdown_status?: string | null;
   saved_markdown_message?: string | null;
   saved_markdown_missing?: boolean | null;
+  final_markdown_dir?: string | null;
   [key: string]: unknown;
 }
 

@@ -1,7 +1,10 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { DragEvent } from "react";
 import { ApiClient, normalizeBaseUrl } from "./api";
 import {
   chooseAutosaveMarkdownDir,
+  chooseMediaPaths,
+  isRegularFilePath,
   loadBackendStatus,
   loadWebAutosaveMarkdownDir,
   loadWebDefaultModel,
@@ -46,7 +49,12 @@ import { AppSidebar, type AppView } from "./components/AppSidebar";
 import { JobWorkspace } from "./components/JobWorkspace";
 import { ModelsModal } from "./components/ModelsModal";
 import { SettingsPanel } from "./components/SettingsPanel";
-import { UploadPanel } from "./components/UploadPanel";
+import {
+  filenameFromPath,
+  isSupportedMediaFile,
+  UploadPanel,
+  UPLOAD_UNSUPPORTED_MEDIA_MESSAGE
+} from "./components/UploadPanel";
 import { formatBytes } from "./format";
 import type {
   AppEnvironment,
@@ -60,6 +68,12 @@ import type {
   SpeakerReviewPayload,
   TranscriptSegment
 } from "./types";
+
+interface MediaSelection {
+  file?: File;
+  name: string;
+  path?: string;
+}
 
 export {
   artifactDisplayName,
@@ -116,7 +130,11 @@ export function App() {
   const [segments, setSegments] = useState<TranscriptSegment[]>([]);
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [events, setEvents] = useState<JobEvent[]>([]);
-  const [mediaFile, setMediaFile] = useState<File | null>(null);
+  const [mediaSelection, setMediaSelection] = useState<MediaSelection | null>(null);
+  const [batchSelections, setBatchSelections] = useState<MediaSelection[]>([]);
+  const [jobOutputDirectory, setJobOutputDirectory] = useState<string | null>(null);
+  const [isWorkspaceDragActive, setIsWorkspaceDragActive] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [transcriptionTitle, setTranscriptionTitle] = useState("");
   const [speakerHint, setSpeakerHint] = useState("");
   const [selectedModelName, setSelectedModelName] = useState(() => loadWebDefaultModel() ?? "large-v3");
@@ -133,6 +151,7 @@ export function App() {
   const [models, setModels] = useState<ModelsPayload | null>(null);
   const [updateState, setUpdateState] = useState<UpdateState>(initialUpdateState);
   const [pendingUpdate, setPendingUpdate] = useState<PendingUpdate | null>(null);
+  const workspaceRef = useRef<HTMLElement | null>(null);
 
   const client = useMemo(() => new ApiClient(normalizeBaseUrl(apiBase)), [apiBase]);
   const selectedJob = jobs.find((job) => job.job_id === selectedJobId) ?? null;
@@ -156,9 +175,9 @@ export function App() {
   const selectedModelTitle = selectedModel?.label ?? selectedModel?.name ?? selectedModelName;
   const selectedModelIsReady = canStartWithDefaultModel(selectedModel);
   const selectedModelStatusText = selectedModel ? modelLabel(selectedModel) : "проверяю модели";
-  const transcriptionTitleError = mediaFile ? titleValidationMessage(transcriptionTitle) : null;
+  const transcriptionTitleError = mediaSelection ? titleValidationMessage(transcriptionTitle) : null;
   const canSubmitJob = canSubmitTranscriptionJob({
-    mediaFile,
+    hasMedia: Boolean(mediaSelection),
     transcriptionTitle,
     isSubmitting,
     selectedModelIsReady
@@ -226,12 +245,48 @@ export function App() {
           setSelectedModelName(environment.defaultModelName);
         }
         setAutosaveMarkdownDir(environment.autosaveMarkdownDir ?? null);
+        setJobOutputDirectory((current) => current ?? environment.autosaveMarkdownDir ?? null);
       }
     });
     return () => {
       isActive = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!isManagedApp) return;
+    let unlisten: (() => void) | undefined;
+    let isActive = true;
+    void import("@tauri-apps/api/webview")
+      .then(({ getCurrentWebview }) => getCurrentWebview().onDragDropEvent((event) => {
+        if (!isActive) return;
+        if (event.payload.type === "leave") {
+          setIsWorkspaceDragActive(false);
+          return;
+        }
+        const rect = workspaceRef.current?.getBoundingClientRect();
+        const scale = window.devicePixelRatio || 1;
+        const position = event.payload.position;
+        const isOverWorkspace = Boolean(rect)
+          && position.x / scale >= rect!.left
+          && position.x / scale <= rect!.right
+          && position.y / scale >= rect!.top
+          && position.y / scale <= rect!.bottom;
+        setIsWorkspaceDragActive(isOverWorkspace);
+        if (event.payload.type === "drop" && isOverWorkspace) {
+          void selectNativePaths(event.payload.paths);
+        }
+      }))
+      .then((nextUnlisten) => {
+        if (isActive) unlisten = nextUnlisten;
+        else nextUnlisten();
+      })
+      .catch((error) => setNotice(error instanceof Error ? error.message : "Native drag-and-drop недоступен"));
+    return () => {
+      isActive = false;
+      unlisten?.();
+    };
+  }, [autosaveMarkdownDir, isManagedApp]);
 
   useEffect(() => {
     if (!isManagedApp) {
@@ -320,12 +375,13 @@ export function App() {
     if (!speakerReview) return;
     if (speakerReview?.status === "pending") return;
     if (finalMarkdownStatus?.status === "saved" || finalMarkdownStatus?.status === "missing") return;
-    if (!autosaveMarkdownDir) {
+    const destination = selectedJob.metadata.final_markdown_dir ?? autosaveMarkdownDir;
+    if (!destination) {
       setNotice("Выберите папку для сохранения транскрипций");
       return;
     }
     if (isSavingFinalMarkdown) return;
-    void saveSelectedFinalMarkdown(autosaveMarkdownDir);
+    void saveSelectedFinalMarkdown(destination);
   }, [
     autosaveMarkdownDir,
     finalMarkdownStatus?.status,
@@ -335,14 +391,87 @@ export function App() {
     speakerReview?.status
   ]);
 
-  function handleMediaFileChange(file: File | null) {
-    setMediaFile(file);
-    setTranscriptionTitle(file ? titleFromFilename(file.name) : "");
+  function applyMediaSelections(selections: MediaSelection[]) {
+    setUploadError(null);
+    setCurrentView("new");
+    setSelectedJobId(null);
+    setJobOutputDirectory(autosaveMarkdownDir);
+    if (selections.length === 1) {
+      setMediaSelection(selections[0]);
+      setBatchSelections([]);
+      setTranscriptionTitle(titleFromFilename(selections[0].name));
+      return;
+    }
+    setMediaSelection(null);
+    setBatchSelections(selections);
+    setTranscriptionTitle("");
+  }
+
+  function selectBrowserFiles(files: File[]) {
+    if (!files.length) return;
+    if (files.some((file) => !isSupportedMediaFile(file))) {
+      setUploadError(UPLOAD_UNSUPPORTED_MEDIA_MESSAGE);
+      return;
+    }
+    applyMediaSelections(files.map((file) => ({ file, name: file.name })));
+  }
+
+  async function selectNativePaths(paths: string[]) {
+    setIsWorkspaceDragActive(false);
+    if (!paths.length) return;
+    const selections = paths.map((path) => ({ name: filenameFromPath(path), path }));
+    const regularFiles = await Promise.all(paths.map((path) => isRegularFilePath(path, true)));
+    if (
+      regularFiles.some((isFile) => !isFile)
+      || selections.some((item) => !isSupportedMediaFile({ name: item.name, type: "" }))
+    ) {
+      setUploadError(UPLOAD_UNSUPPORTED_MEDIA_MESSAGE);
+      return;
+    }
+    applyMediaSelections(selections);
+  }
+
+  async function chooseTranscriptionFiles() {
+    try {
+      const paths = await chooseMediaPaths(isManagedApp);
+      if (paths.length) await selectNativePaths(paths);
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "Не удалось выбрать файлы");
+    }
+  }
+
+  function clearMediaSelection() {
+    setMediaSelection(null);
+    setBatchSelections([]);
+    setTranscriptionTitle("");
+    setUploadError(null);
+    setJobOutputDirectory(autosaveMarkdownDir);
+  }
+
+  function handleWorkspaceDrag(event: DragEvent<HTMLElement>) {
+    if (isManagedApp) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    setIsWorkspaceDragActive(true);
+  }
+
+  function handleWorkspaceDragLeave(event: DragEvent<HTMLElement>) {
+    if (isManagedApp) return;
+    event.preventDefault();
+    const nextTarget = event.relatedTarget instanceof Node ? event.relatedTarget : null;
+    if (!nextTarget || !event.currentTarget.contains(nextTarget)) setIsWorkspaceDragActive(false);
+  }
+
+  function handleWorkspaceDrop(event: DragEvent<HTMLElement>) {
+    if (isManagedApp) return;
+    event.preventDefault();
+    setIsWorkspaceDragActive(false);
+    selectBrowserFiles(Array.from(event.dataTransfer.files));
   }
 
   async function submitJob(event: FormEvent) {
     event.preventDefault();
-    if (!mediaFile) return;
+    if (!mediaSelection) return;
     if (transcriptionTitleError) {
       setNotice(transcriptionTitleError);
       return;
@@ -355,16 +484,18 @@ export function App() {
     setIsSubmitting(true);
     try {
       const job = await client.createJob(
-        mediaFile,
+        mediaSelection.file ?? mediaSelection.path ?? "",
         transcriptionTitle,
         speakerHint,
         selectedModel?.backend,
-        selectedModel?.name ?? selectedModelName
+        selectedModel?.name ?? selectedModelName,
+        jobOutputDirectory ?? undefined
       );
       await refresh();
       setSelectedJobId(job?.job_id ?? null);
       setCurrentView("job");
-      setMediaFile(null);
+      setMediaSelection(null);
+      setBatchSelections([]);
       setTranscriptionTitle("");
       setNotice("Задача поставлена в очередь");
     } catch (error) {
@@ -492,17 +623,44 @@ export function App() {
       if (!selected) return;
       const saved = await saveAutosaveMarkdownDir(selected, isManagedApp);
       setAutosaveMarkdownDir(saved);
+      setJobOutputDirectory((current) => current ?? saved);
       setAppEnvironment((current) => (current ? { ...current, autosaveMarkdownDir: saved } : current));
       setNotice(saved ? `Папка сохранения: ${saved}` : null);
-      if (selectedJob && displayStatus(selectedJob) === "completed" && saved) {
-        await saveSelectedFinalMarkdown(saved);
-      }
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Не удалось выбрать папку сохранения");
     }
   }
 
-  async function saveSelectedFinalMarkdown(dir = autosaveMarkdownDir) {
+  async function chooseJobOutputDirectory() {
+    try {
+      let selected = await chooseAutosaveMarkdownDir(isManagedApp);
+      if (!selected && !isManagedApp) {
+        selected = window.prompt("Папка для этой транскрипции", jobOutputDirectory ?? autosaveMarkdownDir ?? "");
+      }
+      if (selected) setJobOutputDirectory(selected);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Не удалось выбрать папку сохранения");
+    }
+  }
+
+  async function chooseSelectedJobOutputDirectory() {
+    try {
+      let selected = await chooseAutosaveMarkdownDir(isManagedApp);
+      if (!selected && !isManagedApp) {
+        selected = window.prompt(
+          "Папка для этой транскрипции",
+          selectedJob?.metadata.final_markdown_dir ?? autosaveMarkdownDir ?? ""
+        );
+      }
+      if (selected) await saveSelectedFinalMarkdown(selected);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Не удалось выбрать папку сохранения");
+    }
+  }
+
+  async function saveSelectedFinalMarkdown(
+    dir = selectedJob?.metadata.final_markdown_dir ?? autosaveMarkdownDir
+  ) {
     if (!selectedJob) return;
     if (!dir) {
       setNotice("Выберите папку для сохранения транскрипций");
@@ -523,7 +681,8 @@ export function App() {
 
   async function saveSpeakerAssignments(assignments: Record<string, string>, skipped = false) {
     if (!selectedJob) return;
-    if (!autosaveMarkdownDir) {
+    const destination = selectedJob.metadata.final_markdown_dir ?? autosaveMarkdownDir;
+    if (!destination) {
       setNotice("Выберите папку для сохранения транскрипций");
       return;
     }
@@ -531,7 +690,7 @@ export function App() {
     try {
       const result = await client.saveSpeakerReview(selectedJob.job_id, assignments, {
         skipped,
-        autosaveDir: autosaveMarkdownDir
+        autosaveDir: destination
       });
       setSpeakerReview(result.speaker_review);
       if (result.final_markdown) setFinalMarkdownStatus(result.final_markdown);
@@ -569,7 +728,9 @@ export function App() {
   function openNewTranscription() {
     setCurrentView("new");
     setSelectedJobId(null);
-    setMediaFile(null);
+    setMediaSelection(null);
+    setBatchSelections([]);
+    setJobOutputDirectory(autosaveMarkdownDir);
     setTranscriptionTitle("");
     setNotice(null);
   }
@@ -657,7 +818,14 @@ export function App() {
         onSelectJob={selectJob}
       />
 
-      <section className="workspace">
+      <section
+        className={`workspace${isWorkspaceDragActive ? " is-drag-active" : ""}`}
+        ref={workspaceRef}
+        onDragEnter={handleWorkspaceDrag}
+        onDragOver={handleWorkspaceDrag}
+        onDragLeave={handleWorkspaceDragLeave}
+        onDrop={handleWorkspaceDrop}
+      >
         {currentView !== "settings" && health === "down" && backendLifecycle?.state === "error" ? (
           <section className="backend-problem-screen">
             <p className="eyebrow">Ошибка запуска</p>
@@ -670,14 +838,21 @@ export function App() {
           </section>
         ) : currentView === "new" ? (
           <UploadPanel
-            autosaveMarkdownDir={autosaveMarkdownDir}
+            batchFilenames={batchSelections.map((item) => item.name)}
             canSubmitJob={canSubmitJob}
             isSubmitting={isSubmitting}
-            mediaFile={mediaFile}
+            isDragActive={isWorkspaceDragActive}
+            isTauri={isManagedApp}
+            mediaFilename={mediaSelection?.name ?? null}
+            outputDirectory={jobOutputDirectory}
             selectedModelIsReady={selectedModelIsReady}
             selectedModelStatusText={selectedModelStatusText}
             selectedModelTitle={selectedModelTitle}
-            onMediaFileChange={handleMediaFileChange}
+            uploadError={uploadError}
+            onChooseFiles={() => void chooseTranscriptionFiles()}
+            onChooseOutputDirectory={() => void chooseJobOutputDirectory()}
+            onClearSelection={clearMediaSelection}
+            onFilesSelected={selectBrowserFiles}
             onOpenSettings={openSettings}
             onSubmitJob={(event) => void submitJob(event)}
           />
@@ -729,7 +904,7 @@ export function App() {
         ) : selectedJob && selectedJobDisplayStatus ? (
           <JobWorkspace
             artifacts={artifacts}
-            autosaveMarkdownDir={autosaveMarkdownDir}
+            autosaveMarkdownDir={selectedJob.metadata.final_markdown_dir ?? autosaveMarkdownDir}
             client={client}
             events={events}
             finalMarkdownStatus={finalMarkdownStatus}
@@ -740,7 +915,7 @@ export function App() {
             selectedJobDisplayStatus={selectedJobDisplayStatus}
             selectedSpeakerTurns={selectedSpeakerTurns}
             speakerReview={speakerReview}
-            onChooseFinalMarkdownFolder={() => void chooseFinalMarkdownFolder()}
+            onChooseFinalMarkdownFolder={() => void chooseSelectedJobOutputDirectory()}
             onNewTranscription={openNewTranscription}
             onOpenFinalMarkdown={() => void openFinalMarkdown()}
             onSaveFinalMarkdownAgain={() => void saveSelectedFinalMarkdown()}

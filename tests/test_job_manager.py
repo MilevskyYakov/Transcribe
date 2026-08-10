@@ -18,6 +18,7 @@ def test_create_job_initializes_workspace_and_snapshot(tmp_path: Path) -> None:
         output_root=tmp_path / "output",
         config=config,
         job_id="job-123",
+        initial_metadata={"final_markdown_dir": str(tmp_path)},
     )
 
     assert job.job_id == "job-123"
@@ -34,6 +35,7 @@ def test_create_job_initializes_workspace_and_snapshot(tmp_path: Path) -> None:
     assert job.artifacts.final_speech_text_md == str(job_paths.final_speech_text_md)
     assert job.metadata["display_title"] == "sample"
     assert job.metadata["source_filename"] == "sample.mp3"
+    assert job.metadata["final_markdown_dir"] == str(tmp_path)
 
 
 def test_create_job_preserves_manual_display_title(tmp_path: Path) -> None:

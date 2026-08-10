@@ -30,6 +30,7 @@ def test_save_final_markdown_writes_renames_and_detects_missing(tmp_path: Path) 
         'metadata': {'display_title': 'Первое название'},
     }
     autosave_dir = tmp_path / 'saved'
+    autosave_dir.mkdir()
 
     status = save_final_markdown(job, output_root, autosave_dir)
     sync_saved_markdown_metadata(job, status)
@@ -55,3 +56,21 @@ def test_save_final_markdown_writes_renames_and_detects_missing(tmp_path: Path) 
     missing = inspect_saved_final_markdown(job)
     assert missing.missing is True
     assert missing.message == 'Файл транскрипции не найден'
+
+
+def test_save_final_markdown_rejects_unsafe_destination(tmp_path: Path) -> None:
+    output_root = tmp_path / 'output'
+    job_dir = output_root / 'job-1'
+    job_dir.mkdir(parents=True)
+    (job_dir / 'segments.json').write_text(
+        '[{"segment_id":"1","start_seconds":0,"end_seconds":1,"text_raw":"ok","text_clean":"ok"}]',
+        encoding='utf-8',
+    )
+    job = {'job_id': 'job-1', 'metadata': {'display_title': 'Result'}}
+
+    try:
+        save_final_markdown(job, output_root, 'relative/path')
+    except ValueError as error:
+        assert str(error) == 'Папка сохранения должна иметь абсолютный путь'
+    else:
+        raise AssertionError('relative destination must be rejected')

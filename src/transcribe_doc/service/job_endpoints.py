@@ -41,6 +41,7 @@ from transcribe_doc.storage.final_markdown import (
     save_final_markdown,
     sync_saved_markdown_metadata,
     title_derived_markdown_filename,
+    validate_final_markdown_dir,
 )
 from transcribe_doc.storage.speaker_review import (
     apply_speaker_assignments_to_segment_payloads,
@@ -120,7 +121,9 @@ def update_speaker_review_endpoint(ctx: Any, job_id: str) -> ApiResponse:
             skipped=bool(payload.get("skipped", False)),
         )
         final_markdown = None
-        autosave_dir = payload.get("autosave_dir")
+        raw_metadata = job.get("metadata")
+        metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
+        autosave_dir = payload.get("autosave_dir") or metadata.get("final_markdown_dir")
         if isinstance(autosave_dir, str) and autosave_dir.strip():
             status = save_final_markdown(job, ctx.output_root, autosave_dir)
             sync_saved_markdown_metadata(job, status)
@@ -183,7 +186,9 @@ def save_final_markdown_endpoint(ctx: Any, job_id: str) -> ApiResponse:
         return json_response({"error": "job_not_found"}, HTTPStatus.NOT_FOUND)
     try:
         payload = ctx.read_json_object()
-        autosave_dir = payload.get("autosave_dir")
+        raw_metadata = job.get("metadata")
+        metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
+        autosave_dir = payload.get("autosave_dir") or metadata.get("final_markdown_dir")
         if not isinstance(autosave_dir, str) or not autosave_dir.strip():
             raise ValueError("Выберите папку для сохранения транскрипций")
         status = save_final_markdown(job, ctx.output_root, autosave_dir)
@@ -210,11 +215,21 @@ def create_job_endpoint(ctx: Any) -> ApiResponse:
         resolved_input = resolve_single_input(payload["input_path"])
         output_root = Path(payload.get("output_dir") or ctx.output_root)
         display_title = display_title_from_payload(payload)
+        raw_final_markdown_dir = payload.get("final_markdown_dir")
+        final_markdown_dir = (
+            str(validate_final_markdown_dir(raw_final_markdown_dir))
+            if isinstance(raw_final_markdown_dir, str) and raw_final_markdown_dir.strip()
+            else None
+        )
+        initial_metadata: dict[str, object] | None = (
+            {"final_markdown_dir": final_markdown_dir} if final_markdown_dir else None
+        )
         job, _ = create_job(
             source_path=resolved_input.path,
             output_root=output_root,
             config=job_config,
             display_title=display_title,
+            initial_metadata=initial_metadata,
         )
         job.metadata["execution"] = "background"
         persist_job(job, build_job_paths(output_root, job.job_id))
@@ -228,6 +243,7 @@ def create_job_endpoint(ctx: Any) -> ApiResponse:
             speaker_manifest_path=payload.get("speaker_manifest_path"),
             speaker_hint=payload.get("speaker_hint"),
             formats=payload.get("formats"),
+            final_markdown_dir=final_markdown_dir,
         )
     except InputResolutionError as error:
         return json_response({"error": str(error)}, HTTPStatus.UNPROCESSABLE_ENTITY)
@@ -294,6 +310,7 @@ def run_background_job(
     speaker_manifest_path: str | None,
     speaker_hint: str | None,
     formats: str | None,
+    final_markdown_dir: str | None = None,
 ) -> None:
     result = process_single_file(
         input_path,
@@ -301,6 +318,7 @@ def run_background_job(
         config=config,
         job_id=job_id,
         display_title=display_title,
+        initial_metadata={"final_markdown_dir": final_markdown_dir} if final_markdown_dir else None,
         speaker_manifest_path=speaker_manifest_path,
         speaker_hint=speaker_hint,
         formats=formats,

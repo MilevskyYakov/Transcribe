@@ -97,6 +97,7 @@ def process_single_file(
     config: AppConfig,
     job_id: str | None = None,
     display_title: str | None = None,
+    initial_metadata: dict[str, object] | None = None,
     speaker_manifest_path: str | Path | None = None,
     speaker_hint: str | None = None,
     formats: str | None = None,
@@ -115,6 +116,7 @@ def process_single_file(
         config=config,
         job_id=job_id,
         display_title=display_title,
+        initial_metadata=initial_metadata,
     )
     context = ProcessingContext(
         resolved_input_path=resolved_input.path,

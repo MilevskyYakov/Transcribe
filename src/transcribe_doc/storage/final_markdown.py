@@ -94,12 +94,7 @@ def inspect_saved_final_markdown(job: JsonObject) -> FinalMarkdownStatus:
 
 def save_final_markdown(job: JsonObject, output_root: Path, autosave_dir: str | Path) -> FinalMarkdownStatus:
     """Write or update the job's linked final Markdown file in `autosave_dir`."""
-    destination_dir = Path(autosave_dir).expanduser()
-    if not str(destination_dir).strip():
-        raise ValueError("Выберите папку для сохранения транскрипций")
-    if destination_dir.exists() and not destination_dir.is_dir():
-        raise ValueError("Путь сохранения должен быть папкой")
-    destination_dir.mkdir(parents=True, exist_ok=True)
+    destination_dir = validate_final_markdown_dir(autosave_dir)
 
     segments = apply_speaker_assignments_to_segments(
         job,
@@ -107,6 +102,8 @@ def save_final_markdown(job: JsonObject, output_root: Path, autosave_dir: str | 
     )
     filename = title_derived_markdown_filename(job)
     target = destination_dir / filename
+    if target.is_symlink():
+        raise ValueError("Нельзя сохранять Markdown через символическую ссылку")
     previous_path = _string_or_none(_metadata(job).get("saved_markdown_path"))
     if previous_path:
         previous = Path(previous_path)
@@ -120,6 +117,7 @@ def save_final_markdown(job: JsonObject, output_root: Path, autosave_dir: str | 
             "saved_markdown_path": str(target),
             "saved_markdown_filename": target.name,
             "saved_markdown_dir": str(destination_dir),
+            "final_markdown_dir": str(destination_dir),
             "saved_markdown_missing": False,
             "saved_markdown_saved_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
         }
@@ -131,6 +129,23 @@ def save_final_markdown(job: JsonObject, output_root: Path, autosave_dir: str | 
         path=str(target),
         filename=target.name,
     )
+
+
+def validate_final_markdown_dir(value: str | Path) -> Path:
+    """Resolve an existing absolute directory accepted as a final Markdown destination."""
+    raw = str(value).strip()
+    if not raw:
+        raise ValueError("Выберите папку для сохранения транскрипций")
+    path = Path(raw).expanduser()
+    if not path.is_absolute():
+        raise ValueError("Папка сохранения должна иметь абсолютный путь")
+    try:
+        resolved = path.resolve(strict=True)
+    except FileNotFoundError as error:
+        raise ValueError("Папка сохранения не найдена") from error
+    if not resolved.is_dir():
+        raise ValueError("Путь сохранения должен быть папкой")
+    return resolved
 
 
 def sync_saved_markdown_metadata(job: JsonObject, status: FinalMarkdownStatus) -> None:

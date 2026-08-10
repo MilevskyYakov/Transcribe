@@ -20,6 +20,7 @@ def create_job(
     config: AppConfig,
     job_id: str | None = None,
     display_title: str | None = None,
+    initial_metadata: dict[str, object] | None = None,
 ) -> tuple[Job, JobPaths]:
     """Create a new job workspace and persist initial metadata."""
     resolved_job_id = job_id or _generate_job_id()
@@ -60,6 +61,7 @@ def create_job(
         metadata={
             "display_title": title,
             "source_filename": source_filename,
+            **(initial_metadata or {}),
         },
     )
     save_job(job, job_paths.job_json)

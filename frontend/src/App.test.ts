@@ -141,7 +141,7 @@ describe("job titles", () => {
     expect(titleValidationMessage("Client Call")).toBeNull();
     expect(
       canSubmitTranscriptionJob({
-        mediaFile,
+        hasMedia: Boolean(mediaFile),
         transcriptionTitle: "Client Call",
         isSubmitting: false,
         selectedModelIsReady: true
@@ -149,7 +149,7 @@ describe("job titles", () => {
     ).toBe(true);
     expect(
       canSubmitTranscriptionJob({
-        mediaFile,
+        hasMedia: Boolean(mediaFile),
         transcriptionTitle: "   ",
         isSubmitting: false,
         selectedModelIsReady: true

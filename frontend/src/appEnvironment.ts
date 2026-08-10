@@ -142,6 +142,26 @@ export async function chooseAutosaveMarkdownDir(isTauri: boolean): Promise<strin
   return typeof selected === "string" ? selected : null;
 }
 
+export async function chooseMediaPaths(isTauri: boolean): Promise<string[]> {
+  if (!isTauri) return [];
+  const { open } = await import("@tauri-apps/plugin-dialog");
+  const selected = await open({
+    multiple: true,
+    directory: false,
+    filters: [{
+      name: "Аудио и видео",
+      extensions: ["mp3", "wav", "m4a", "aac", "flac", "ogg", "mp4", "mov", "mkv", "avi", "webm"]
+    }]
+  });
+  return typeof selected === "string" ? [selected] : selected ?? [];
+}
+
+export async function isRegularFilePath(path: string, isTauri: boolean): Promise<boolean> {
+  if (!isTauri) return false;
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<boolean>("is_regular_file_path", { path });
+}
+
 export async function openSavedMarkdownPath(path: string, isTauri: boolean): Promise<void> {
   if (!isTauri) return;
   const { open } = await import("@tauri-apps/plugin-shell");
