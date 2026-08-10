@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1060" viewBox="0 0 1600 1060">
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="28" flood-color="#18315f" flood-opacity="0.10"/>
+    </filter>
+    <style>
+      .sans { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; }
+      .serif { font-family: "Didot", "Bodoni 72", Georgia, serif; }
+      .eyebrow { font-size: 15px; font-weight: 700; letter-spacing: 2.4px; fill: #546078; }
+      .title { font-size: 72px; font-weight: 400; letter-spacing: -2px; fill: #14203b; }
+      .meta { font-size: 18px; font-weight: 500; fill: #546078; }
+      .card-title { font-size: 29px; font-weight: 650; fill: #14203b; }
+      .body { font-size: 18px; font-weight: 450; fill: #546078; }
+      .risk { font-size: 15px; font-weight: 600; fill: #725a55; }
+      .wordmark { font-size: 46px; font-weight: 400; letter-spacing: -1px; fill: #14203b; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1060" fill="#f4f1e9"/>
+  <rect x="0" y="0" width="16" height="1060" fill="#ee6a51"/>
+
+  <text x="92" y="80" class="sans eyebrow">MNEMA · ISSUE 55 · LOGO / APP ICON</text>
+  <text x="92" y="160" class="serif title">Один характер. Три знака.</text>
+  <text x="94" y="205" class="sans meta">Фиксировано: редакционный объект · Didot + system sans · синий + редкий коралл · мягкая геометрия</text>
+  <text x="94" y="236" class="sans meta">Изменяется только идея знака. Коралл — декоративный разрез, не waveform и не данные.</text>
+
+  <!-- Candidate A -->
+  <g filter="url(#shadow)">
+    <rect x="72" y="294" width="464" height="682" rx="18" fill="#fffdf8"/>
+  </g>
+  <text x="106" y="345" class="sans eyebrow">A</text>
+  <text x="106" y="388" class="sans card-title">Редакционный разрез</text>
+  <g transform="translate(170 426)">
+    <rect width="268" height="268" rx="60" fill="#183f9b"/>
+    <path d="M74 58 H180 L210 88 V210 H74 Z" fill="#fffdf8"/>
+    <path d="M180 58 V88 H210" fill="none" stroke="#183f9b" stroke-width="8" stroke-linejoin="round"/>
+    <path d="M49 187 L219 127" stroke="#ee6a51" stroke-width="18" stroke-linecap="round"/>
+  </g>
+  <g transform="translate(106 738)">
+    <g transform="translate(0 0) scale(.19)">
+      <rect width="268" height="268" rx="60" fill="#183f9b"/>
+      <path d="M74 58 H180 L210 88 V210 H74 Z" fill="#fffdf8"/>
+      <path d="M180 58 V88 H210" fill="none" stroke="#183f9b" stroke-width="8" stroke-linejoin="round"/>
+      <path d="M49 187 L219 127" stroke="#ee6a51" stroke-width="18" stroke-linecap="round"/>
+    </g>
+    <text x="68" y="41" class="serif wordmark">Mnema</text>
+  </g>
+  <text x="106" y="833" class="sans body">Запись становится редакционным</text>
+  <text x="106" y="860" class="sans body">объектом. Разрез даёт свой жест.</text>
+  <text x="106" y="912" class="sans risk">Сильнее всего держится в 16–512 px.</text>
+
+  <!-- Candidate B -->
+  <g filter="url(#shadow)">
+    <rect x="568" y="294" width="464" height="682" rx="18" fill="#fffdf8"/>
+  </g>
+  <text x="602" y="345" class="sans eyebrow">B</text>
+  <text x="602" y="388" class="sans card-title">Редакционные поля</text>
+  <g transform="translate(666 426)">
+    <rect width="268" height="268" rx="60" fill="#183f9b"/>
+    <path d="M58 61 H124 V207 H58 Z" fill="#fffdf8"/>
+    <path d="M144 61 H210 V207 H144 Z" fill="#fffdf8"/>
+    <path d="M134 79 V189" stroke="#ee6a51" stroke-width="10" stroke-linecap="round"/>
+    <path d="M76 89 H107 M76 116 H107 M76 143 H107" stroke="#183f9b" stroke-width="7" stroke-linecap="round" opacity=".72"/>
+    <path d="M161 89 H192 M161 116 H192 M161 143 H192" stroke="#183f9b" stroke-width="7" stroke-linecap="round" opacity=".72"/>
+  </g>
+  <g transform="translate(602 738)">
+    <g transform="translate(0 0) scale(.19)">
+      <rect width="268" height="268" rx="60" fill="#183f9b"/>
+      <path d="M58 61 H124 V207 H58 Z" fill="#fffdf8"/>
+      <path d="M144 61 H210 V207 H144 Z" fill="#fffdf8"/>
+      <path d="M134 79 V189" stroke="#ee6a51" stroke-width="10" stroke-linecap="round"/>
+    </g>
+    <text x="68" y="41" class="serif wordmark">Mnema</text>
+  </g>
+  <text x="602" y="833" class="sans body">Голос раскладывается по смысловым</text>
+  <text x="602" y="860" class="sans body">полям. Самый системный вариант.</text>
+  <text x="602" y="912" class="sans risk">Риск: в малом размере читается как pause.</text>
+
+  <!-- Candidate C -->
+  <g filter="url(#shadow)">
+    <rect x="1064" y="294" width="464" height="682" rx="18" fill="#fffdf8"/>
+  </g>
+  <text x="1098" y="345" class="sans eyebrow">C · ВЫБРАНО</text>
+  <text x="1098" y="388" class="sans card-title">Индекс памяти</text>
+  <g transform="translate(1162 426)">
+    <rect width="268" height="268" rx="60" fill="#183f9b"/>
+    <rect x="59" y="82" width="142" height="125" rx="10" fill="#a9b9e2" opacity=".68"/>
+    <rect x="72" y="68" width="142" height="125" rx="10" fill="#d9e0f2"/>
+    <rect x="85" y="54" width="142" height="125" rx="10" fill="#fffdf8"/>
+    <path d="M111 88 H194 M111 113 H179 M111 138 H188" stroke="#183f9b" stroke-width="8" stroke-linecap="round" opacity=".78"/>
+    <path d="M195 54 V94 H227" fill="#ee6a51"/>
+  </g>
+  <g transform="translate(1098 738)">
+    <g transform="translate(0 0) scale(.19)">
+      <rect width="268" height="268" rx="60" fill="#183f9b"/>
+      <rect x="59" y="82" width="142" height="125" rx="10" fill="#a9b9e2" opacity=".68"/>
+      <rect x="72" y="68" width="142" height="125" rx="10" fill="#d9e0f2"/>
+      <rect x="85" y="54" width="142" height="125" rx="10" fill="#fffdf8"/>
+      <path d="M195 54 V94 H227" fill="#ee6a51"/>
+    </g>
+    <text x="68" y="41" class="serif wordmark">Mnema</text>
+  </g>
+  <text x="1098" y="833" class="sans body">Запись получает место в личном</text>
+  <text x="1098" y="860" class="sans body">архиве. Самый буквальный вариант.</text>
+  <text x="1098" y="912" class="sans risk">Риск: ближе к generic notes/document.</text>
+
+  <text x="92" y="1020" class="sans meta">Выбран C · «Индекс памяти». Финальный handoff и Tauri assets зафиксированы рядом с этим сравнением.</text>
+</svg>
