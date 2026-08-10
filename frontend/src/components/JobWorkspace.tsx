@@ -1,31 +1,18 @@
 import { useEffect, useState } from "react";
-import {
-  Activity,
-  AlertTriangle,
-  CheckCircle2,
-  Download,
-  FileText,
-  FolderOpen,
-  ListChecks,
-  ShieldCheck,
-  Users
-} from "lucide-react";
+import { AlertTriangle, Check, ExternalLink, FileText, FolderOpen, RotateCcw, Users } from "lucide-react";
 import type { ApiClient } from "../api";
 import { formatBytes, formatSeconds } from "../format";
-import type { Artifact, FinalMarkdownStatus, Job, JobEvent, SpeakerReviewPayload, TranscriptSegment, WordToken } from "../types";
+import type { Artifact, FinalMarkdownStatus, Job, JobEvent, SpeakerReviewPayload } from "../types";
 import {
   artifactDisplayName,
   compareArtifactsForDisplay,
   currentMessage,
   currentProgress,
-  currentProgressLabel,
-  elapsedText,
   eventDisplayMessage,
   eventDisplayStatus,
+  isActiveJob,
   isRawRuntimeDetail,
   jobDisplayTitle,
-  languageLabel,
-  statusLabel,
   type SpeakerTurn
 } from "../appViewModel";
 
@@ -35,21 +22,19 @@ interface JobWorkspaceProps {
   client: ApiClient;
   events: JobEvent[];
   finalMarkdownStatus: FinalMarkdownStatus | null;
-  isSelectedJobQuiet: boolean;
   isSavingFinalMarkdown: boolean;
   notice: string | null;
-  now: number;
-  selectedDiarizationDiagnostic: string | null;
   selectedDisplayWarnings: string[];
-  selectedJob: Job | null;
-  selectedJobDisplayStatus: string | null;
-  selectedLastEventTime: number | null;
+  selectedJob: Job;
+  selectedJobDisplayStatus: string;
   selectedSpeakerTurns: SpeakerTurn[];
   speakerReview: SpeakerReviewPayload | null;
   onChooseFinalMarkdownFolder: () => void;
+  onNewTranscription: () => void;
   onOpenFinalMarkdown: () => void;
   onSaveFinalMarkdownAgain: () => void;
   onSaveSpeakerAssignments: (assignments: Record<string, string>) => void;
+  onShowInFinder: () => void;
   onSkipSpeakerAssignments: (assignments: Record<string, string>) => void;
 }
 
@@ -59,405 +44,240 @@ export function JobWorkspace({
   client,
   events,
   finalMarkdownStatus,
-  isSelectedJobQuiet,
   isSavingFinalMarkdown,
   notice,
-  now,
-  selectedDiarizationDiagnostic,
   selectedDisplayWarnings,
   selectedJob,
   selectedJobDisplayStatus,
-  selectedLastEventTime,
   selectedSpeakerTurns,
   speakerReview,
   onChooseFinalMarkdownFolder,
+  onNewTranscription,
   onOpenFinalMarkdown,
   onSaveFinalMarkdownAgain,
   onSaveSpeakerAssignments,
+  onShowInFinder,
   onSkipSpeakerAssignments
 }: JobWorkspaceProps) {
-  return (
-    <>
-      {selectedJob && (
-        <header className="workspace-header">
-          <div>
-            <p className="eyebrow">Задача</p>
-            <h2>{jobDisplayTitle(selectedJob)}</h2>
-          </div>
-          <span className={`status-pill large ${selectedJobDisplayStatus ?? selectedJob.status}`}>
-            {statusLabel(selectedJobDisplayStatus ?? selectedJob.status)}
-          </span>
-        </header>
-      )}
-
-      {selectedJob && (
-        <>
-          <section className={`progress-panel ${selectedJobDisplayStatus ?? selectedJob.status}`}>
-            <div className="progress-copy">
-              <div>
-                <span className="progress-kicker">Сейчас</span>
-                <strong>{currentMessage(selectedJob)}</strong>
-              </div>
-              <span className="progress-percent">{currentProgressLabel(selectedJob)}</span>
-            </div>
-            <div className="progress-track" aria-label="Прогресс обработки">
-              <div style={{ width: `${currentProgress(selectedJob)}%` }} />
-            </div>
-            <div className="progress-meta">
-              <span>{languageLabel(selectedJob)}</span>
-              {selectedLastEventTime !== null && (
-                <span>последнее событие {elapsedText(now - selectedLastEventTime)} назад</span>
-              )}
-            </div>
-            {isSelectedJobQuiet && (
-              <p className="stalled-note">
-                Новых событий давно нет. Сейчас задача находится в долгом шаге ASR: модель может
-                загружаться или распознавать длинный файл. Подробности пишутся в job.log.
-              </p>
-            )}
-          </section>
-
-          {notice && <div className="notice">{notice}</div>}
-
-          <div className="content-grid">
-            <TranscriptPane turns={selectedSpeakerTurns} />
-            <aside className="detail-pane">
-              <SpeakerReviewPanel
-                isSaving={isSavingFinalMarkdown}
-                review={speakerReview}
-                onSave={onSaveSpeakerAssignments}
-                onSkip={onSkipSpeakerAssignments}
-              />
-              <ProcessPanel events={events} selectedJob={selectedJob} />
-              <DiagnosticsPanel
-                isSelectedJobQuiet={isSelectedJobQuiet}
-                selectedDiarizationDiagnostic={selectedDiarizationDiagnostic}
-                selectedDisplayWarnings={selectedDisplayWarnings}
-              />
-              <FinalMarkdownPanel
-                autosaveMarkdownDir={autosaveMarkdownDir}
-                finalMarkdownStatus={finalMarkdownStatus}
-                isSaving={isSavingFinalMarkdown}
-                selectedJob={selectedJob}
-                onChooseFolder={onChooseFinalMarkdownFolder}
-                onOpenFile={onOpenFinalMarkdown}
-                onSaveAgain={onSaveFinalMarkdownAgain}
-              />
-              <ArtifactsPanel artifacts={artifacts} client={client} />
-            </aside>
-          </div>
-        </>
-      )}
-
-      {!selectedJob && notice && <div className="notice">{notice}</div>}
-
-      {!selectedJob && (
-        <section className="empty-workspace">
-          <FileText size={26} />
-          <strong>Здесь появится готовая расшифровка</strong>
-          <p>Пока главный экран свободен: выберите запись выше и нажмите одну основную кнопку запуска.</p>
-          <div className="empty-flow-hint">
-            <span>Файл</span>
-            <span>→</span>
-            <span>Проверка спикеров</span>
-            <span>→</span>
-            <span>Готовый Markdown</span>
-          </div>
-        </section>
-      )}
-    </>
-  );
-}
-
-function TranscriptPane({ turns }: { turns: SpeakerTurn[] }) {
-  return (
-    <section className="transcript-pane">
-      <div className="pane-title">
-        <Activity size={18} />
-        <h3>Транскрипт</h3>
-      </div>
-      <div className="segments">
-        {turns.map((turn) => (
-          <article className="speaker-turn" key={turn.id}>
-            <header>
-              <b>{turn.speakerLabel}</b>
-              <time>
-                {formatSeconds(turn.start_seconds)} - {formatSeconds(turn.end_seconds)}
-              </time>
-            </header>
-            <div>
-              {turn.segments.map((segment, index) => (
-                <p key={`${turn.id}-${index}`}>{renderSegmentText(segment)}</p>
-              ))}
-            </div>
-          </article>
-        ))}
-        {turns.length === 0 && <div className="empty-state">Транскрипт пока не готов</div>}
-      </div>
-    </section>
-  );
-}
-
-function renderSegmentText(segment: TranscriptSegment) {
-  const text = (segment.text_clean || segment.text_raw).trim();
-  const words = segment.words ?? [];
-  if (!words.some((word) => word.issues?.length)) return text;
-
-  const visibleWords = words.filter((word) => word.text_clean !== "");
-  return visibleWords.map((word, index) => {
-    const displayText = word.text_clean || word.text;
-    const issueSummary = word.issues?.map((issue) => issue.message || issue.code).join("; ");
-    const className = word.issues?.length ? `word-token ${wordIssueClass(word)}` : "word-token";
-    const suffix =
-      index === visibleWords.length - 1 && needsTerminalPunctuation(text, displayText)
-        ? text[text.length - 1]
-        : "";
+  if (isActiveJob(selectedJob)) {
     return (
-      <span className={className} key={`${word.start_seconds}-${index}`} title={issueSummary}>
-        {displayText}
-        {suffix}
-        {index < visibleWords.length - 1 ? " " : ""}
-      </span>
+      <ProcessingScreen
+        events={events}
+        job={selectedJob}
+        notice={notice}
+      />
     );
-  });
-}
+  }
 
-function wordIssueClass(word: WordToken): string {
-  const severity = word.issues?.some((issue) => issue.severity === "warning")
-    ? "word-token-warning"
-    : "word-token-info";
-  return severity;
-}
-
-function needsTerminalPunctuation(text: string, lastWord: string): boolean {
-  if (!text || !lastWord) return false;
-  const terminal = text[text.length - 1];
-  return [".", "!", "?", "…"].includes(terminal) && !lastWord.endsWith(terminal);
-}
-
-
-function SpeakerReviewPanel({
-  isSaving,
-  review,
-  onSave,
-  onSkip
-}: {
-  isSaving: boolean;
-  review: SpeakerReviewPayload | null;
-  onSave: (assignments: Record<string, string>) => void;
-  onSkip: (assignments: Record<string, string>) => void;
-}) {
-  const [assignments, setAssignments] = useState<Record<string, string>>({});
-  const groups = review?.groups ?? [];
-  const isPending = review?.status === "pending";
-
-  useEffect(() => {
-    const next: Record<string, string> = {};
-    for (const group of groups) {
-      next[group.machine_label] = group.display_label === group.fallback_label ? "" : group.display_label;
-    }
-    setAssignments(next);
-  }, [review?.status, groups.map((group) => `${group.machine_label}:${group.display_label}`).join("|")]);
-
-  if (!groups.length || review?.status === "not_required") return null;
+  if (selectedJobDisplayStatus === "failed" || selectedJobDisplayStatus === "failed_partial") {
+    return (
+      <ErrorScreen
+        events={events}
+        job={selectedJob}
+        warnings={selectedDisplayWarnings}
+        onNewTranscription={onNewTranscription}
+      />
+    );
+  }
 
   return (
-    <section className={isPending ? "speaker-review-panel pending" : "speaker-review-panel"}>
-      <div className="pane-title">
-        <Users size={18} />
-        <h3>Проверьте спикеров</h3>
+    <ResultScreen
+      artifacts={artifacts}
+      autosaveMarkdownDir={autosaveMarkdownDir}
+      client={client}
+      events={events}
+      finalMarkdownStatus={finalMarkdownStatus}
+      isSaving={isSavingFinalMarkdown}
+      job={selectedJob}
+      notice={notice}
+      speakerReview={speakerReview}
+      turns={selectedSpeakerTurns}
+      warnings={selectedDisplayWarnings}
+      onChooseFolder={onChooseFinalMarkdownFolder}
+      onNewTranscription={onNewTranscription}
+      onOpenFile={onOpenFinalMarkdown}
+      onSaveAgain={onSaveFinalMarkdownAgain}
+      onSaveSpeakerAssignments={onSaveSpeakerAssignments}
+      onShowInFinder={onShowInFinder}
+      onSkipSpeakerAssignments={onSkipSpeakerAssignments}
+    />
+  );
+}
+
+function ProcessingScreen({ events, job, notice }: { events: JobEvent[]; job: Job; notice: string | null }) {
+  const progress = currentProgress(job);
+  return (
+    <section className="processing-screen">
+      <header className="screen-header job-heading">
+        <div><p className="eyebrow">Обрабатывается</p><h1>{jobDisplayTitle(job)}</h1></div>
+        <span className="status-label processing">Обработка</span>
+      </header>
+      <div className="processing-field">
+        <span className="editorial-cut" aria-hidden="true" />
+        <strong className="progress-number">{progress}%</strong>
+        <div><p>{currentMessage(job)}</p><div className="progress-track"><span style={{ width: `${progress}%` }} /></div></div>
       </div>
-      <p className="speaker-review-help">
-        Назначьте имена по примерным репликам. Если оставить пусто, в файле будет «Спикер 1», «Спикер 2».
-      </p>
-      <div className="speaker-review-list">
-        {groups.map((group) => (
-          <label className="speaker-review-row" key={group.machine_label}>
-            <span>
-              <strong>{group.fallback_label}</strong>
-              {group.example && <small>“{group.example}”</small>}
-            </span>
-            <input
-              list={`speaker-suggestions-${group.machine_label}`}
-              placeholder={group.fallback_label}
-              value={assignments[group.machine_label] ?? ""}
-              onChange={(event) =>
-                setAssignments((current) => ({
-                  ...current,
-                  [group.machine_label]: event.target.value
-                }))
-              }
-            />
-            <datalist id={`speaker-suggestions-${group.machine_label}`}>
-              {group.suggestions.map((suggestion) => (
-                <option key={suggestion} value={suggestion} />
-              ))}
-            </datalist>
-          </label>
-        ))}
-      </div>
-      <div className="speaker-review-actions">
-        <button type="button" disabled={isSaving} onClick={() => onSave(assignments)}>
-          {isSaving ? "Сохраняю…" : "Сохранить транскрипцию"}
-        </button>
-        <button type="button" disabled={isSaving} onClick={() => onSkip({})}>
-          Пропустить и сохранить
-        </button>
-      </div>
+      <p className="background-note">Можно открыть другую запись — обработка продолжится в фоне.</p>
+      {notice && <p className="notice">{notice}</p>}
+      <details className="secondary-details"><summary>Дополнительно</summary><EventList events={events} job={job} /></details>
     </section>
   );
 }
 
-function ProcessPanel({ events, selectedJob }: { events: JobEvent[]; selectedJob: Job }) {
+function ErrorScreen({ events, job, warnings, onNewTranscription }: { events: JobEvent[]; job: Job; warnings: string[]; onNewTranscription: () => void }) {
   return (
-    <section className="process-card">
-      <div className="pane-title">
-        <ListChecks size={18} />
-        <h3>Процесс</h3>
+    <section className="error-screen">
+      <header className="screen-header job-heading">
+        <div><p className="eyebrow">Ошибка задачи</p><h1>{jobDisplayTitle(job)}</h1></div>
+        <span className="status-label failed"><AlertTriangle size={14} /> Не удалось обработать</span>
+      </header>
+      <div className="error-state">
+        <AlertTriangle size={28} />
+        <h2>Обработка остановилась</h2>
+        <p>Создайте новую транскрипцию и выберите запись повторно. Остальные фоновые задачи продолжат работу.</p>
+        <button className="primary-button" type="button" onClick={onNewTranscription}><RotateCcw size={17} /> Повторить с файлом</button>
       </div>
-      <div className="event-list">
-        {events.length ? (
-          events.map((event, index) => (
-            <article
-              className={`event-row ${eventDisplayStatus(event, selectedJob)}`}
-              key={`${event.timestamp}-${index}`}
-            >
-              <span>{event.progress}%</span>
-              <div>
-                <strong>{eventDisplayMessage(event, selectedJob)}</strong>
-                <small>
-                  {event.stage} · {event.timestamp}
-                </small>
-              </div>
-            </article>
-          ))
-        ) : (
-          <p>Событий пока нет</p>
-        )}
-      </div>
+      <details className="secondary-details"><summary>Технические детали</summary><WarningList warnings={warnings} /><EventList events={events} job={job} /></details>
     </section>
   );
 }
 
-function DiagnosticsPanel({
-  isSelectedJobQuiet,
-  selectedDiarizationDiagnostic,
-  selectedDisplayWarnings
-}: {
-  isSelectedJobQuiet: boolean;
-  selectedDiarizationDiagnostic: string | null;
-  selectedDisplayWarnings: string[];
-}) {
-  return (
-    <section className="diagnostics-card">
-      <div className="pane-title">
-        {selectedDisplayWarnings.length ? <AlertTriangle size={18} /> : <ShieldCheck size={18} />}
-        <h3>{selectedDisplayWarnings.length ? "Нужна проверка" : "Проверки"}</h3>
-      </div>
-      <div className="warnings">
-        {selectedDisplayWarnings.length ? (
-          selectedDisplayWarnings.map((warning) =>
-            isRawRuntimeDetail(warning) ? (
-              <details className="technical-details" key={warning}>
-                <summary>Технические детали ошибки</summary>
-                <pre>{warning}</pre>
-              </details>
-            ) : (
-              <p key={warning}>{warning}</p>
-            )
-          )
-        ) : selectedDiarizationDiagnostic ? (
-          <p>{selectedDiarizationDiagnostic}</p>
-        ) : (
-          <p>
-            {isSelectedJobQuiet
-              ? "Официальной ошибки нет, но задача давно не присылала новых событий."
-              : "Предупреждений нет"}
-          </p>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function FinalMarkdownPanel({
+function ResultScreen({
+  artifacts,
   autosaveMarkdownDir,
+  client,
+  events,
   finalMarkdownStatus,
   isSaving,
-  selectedJob,
+  job,
+  notice,
+  speakerReview,
+  turns,
+  warnings,
   onChooseFolder,
+  onNewTranscription,
   onOpenFile,
-  onSaveAgain
+  onSaveAgain,
+  onSaveSpeakerAssignments,
+  onShowInFinder,
+  onSkipSpeakerAssignments
 }: {
+  artifacts: Artifact[];
   autosaveMarkdownDir: string | null;
+  client: ApiClient;
+  events: JobEvent[];
   finalMarkdownStatus: FinalMarkdownStatus | null;
   isSaving: boolean;
-  selectedJob: Job;
+  job: Job;
+  notice: string | null;
+  speakerReview: SpeakerReviewPayload | null;
+  turns: SpeakerTurn[];
+  warnings: string[];
   onChooseFolder: () => void;
+  onNewTranscription: () => void;
   onOpenFile: () => void;
   onSaveAgain: () => void;
+  onSaveSpeakerAssignments: (assignments: Record<string, string>) => void;
+  onShowInFinder: () => void;
+  onSkipSpeakerAssignments: (assignments: Record<string, string>) => void;
 }) {
-  const savedPath = finalMarkdownStatus?.path ?? selectedJob.metadata.saved_markdown_path ?? null;
-  const filename = finalMarkdownStatus?.filename ?? selectedJob.metadata.saved_markdown_filename ?? null;
-  const missing = finalMarkdownStatus?.missing ?? selectedJob.metadata.saved_markdown_missing ?? false;
-  const saved = Boolean(filename && !missing);
-  const panelTone = missing ? "missing" : saved ? "saved" : "pending";
-  const message = missing
-    ? "Файл транскрипции не найден"
-    : finalMarkdownStatus?.message ??
-      selectedJob.metadata.saved_markdown_message ??
-      (autosaveMarkdownDir ? "Готовый Markdown будет сохранён автоматически" : "Выберите папку для сохранения транскрипций");
+  const savedPath = finalMarkdownStatus?.path ?? job.metadata.saved_markdown_path ?? null;
+  const filename = finalMarkdownStatus?.filename ?? job.metadata.saved_markdown_filename ?? null;
+  const missing = finalMarkdownStatus?.missing ?? job.metadata.saved_markdown_missing ?? false;
+  const needsSpeakerReview = speakerReview?.status === "pending" && Boolean(speakerReview.groups.length);
 
   return (
-    <section className={`final-markdown-card ${panelTone}`}>
-      <div className="pane-title">
-        {saved ? <CheckCircle2 size={18} /> : <FolderOpen size={18} />}
-        <h3>{saved ? "Готовый Markdown" : "Сохранение Markdown"}</h3>
-      </div>
-      <div className="autosave-panel">
-        <p>{message}</p>
-        {autosaveMarkdownDir && <small>Папка: {autosaveMarkdownDir}</small>}
-        {filename && !missing && <strong>Сохранено: {filename}</strong>}
-        <div className="autosave-actions">
-          <button type="button" onClick={onChooseFolder}>
-            {autosaveMarkdownDir ? "Сменить папку" : "Выбрать папку"}
-          </button>
-          {savedPath && !missing && (
-            <button type="button" onClick={onOpenFile}>
-              Открыть файл
-            </button>
+    <section className="result-screen">
+      <header className="screen-header job-heading">
+        <div><p className="eyebrow">Результат</p><h1>{jobDisplayTitle(job)}</h1></div>
+        <span className={warnings.length ? "status-label warning" : "status-label completed"}><Check size={14} /> {warnings.length ? "Готово с предупреждением" : "Готово"}</span>
+      </header>
+
+      {needsSpeakerReview && (
+        <SpeakerReviewPanel
+          isSaving={isSaving}
+          review={speakerReview}
+          onSave={onSaveSpeakerAssignments}
+          onSkip={onSkipSpeakerAssignments}
+        />
+      )}
+
+      <section className={missing ? "result-file missing" : "result-file"}>
+        <FileText size={30} />
+        <div><strong>{filename ?? `${jobDisplayTitle(job)}.md`}</strong><p>{missing ? "Файл не найден" : savedPath ?? autosaveMarkdownDir ?? "Markdown готовится"}</p></div>
+      </section>
+
+      {!needsSpeakerReview && (
+        <div className="result-actions">
+          {missing ? (
+            <button className="primary-button" disabled={isSaving} type="button" onClick={onSaveAgain}>{isSaving ? "Сохраняю…" : "Сохранить заново"}</button>
+          ) : (
+            <button className="primary-button" disabled={!savedPath} type="button" onClick={onOpenFile}><ExternalLink size={17} /> Открыть Markdown</button>
           )}
-          {missing && (
-            <button type="button" disabled={isSaving} onClick={onSaveAgain}>
-              {isSaving ? "Сохраняю…" : "Сохранить заново"}
-            </button>
-          )}
+          <button className="secondary-button" disabled={!savedPath || missing} type="button" onClick={onShowInFinder}><FolderOpen size={17} /> Показать в Finder</button>
+          <button className="text-button" type="button" onClick={onNewTranscription}>Новая транскрипция</button>
+          {missing && <button className="text-button" type="button" onClick={onChooseFolder}>Изменить папку</button>}
         </div>
-      </div>
+      )}
+
+      {notice && <p className="notice">{notice}</p>}
+      {turns.length > 0 && <TranscriptPreview turns={turns} />}
+      <details className="secondary-details">
+        <summary>Дополнительно</summary>
+        <div className="details-grid">
+          <section><h2>Процесс</h2><EventList events={events} job={job} /></section>
+          <section><h2>Диагностика</h2><WarningList warnings={warnings} /></section>
+          <section><h2>Артефакты</h2><ArtifactList artifacts={artifacts} client={client} /></section>
+        </div>
+      </details>
     </section>
   );
 }
 
-function ArtifactsPanel({ artifacts, client }: { artifacts: Artifact[]; client: ApiClient }) {
+function TranscriptPreview({ turns }: { turns: SpeakerTurn[] }) {
   return (
-    <section className="artifacts-card">
-      <div className="pane-title">
-        <Download size={18} />
-        <h3>Артефакты</h3>
-      </div>
-      <div className="artifact-list">
-        {[...artifacts].sort(compareArtifactsForDisplay).map((artifact) => (
-          <a
-            className={artifact.name === "final_speech_text_md" ? "primary-artifact" : undefined}
-            href={client.artifactUrl(artifact)}
-            key={artifact.name}
-          >
-            <span>{artifactDisplayName(artifact)}</span>
-            <small>{formatBytes(artifact.size_bytes)}</small>
-          </a>
-        ))}
-        {artifacts.length === 0 && <p>Артефактов пока нет</p>}
-      </div>
+    <section className="transcript-preview">
+      <h2>Фрагмент транскрипции</h2>
+      {turns.slice(0, 4).map((turn) => (
+        <article key={turn.id}>
+          <header><strong>{turn.speakerLabel}</strong><time>{formatSeconds(turn.start_seconds)}–{formatSeconds(turn.end_seconds)}</time></header>
+          <p>{turn.texts.join(" ")}</p>
+        </article>
+      ))}
     </section>
   );
+}
+
+function SpeakerReviewPanel({ isSaving, review, onSave, onSkip }: { isSaving: boolean; review: SpeakerReviewPayload; onSave: (assignments: Record<string, string>) => void; onSkip: (assignments: Record<string, string>) => void }) {
+  const [assignments, setAssignments] = useState<Record<string, string>>({});
+  useEffect(() => {
+    setAssignments(Object.fromEntries(review.groups.map((group) => [group.machine_label, group.display_label === group.fallback_label ? "" : group.display_label])));
+  }, [review]);
+
+  return (
+    <section className="speaker-review-panel">
+      <header><Users size={19} /><div><h2>Проверьте подписи спикеров</h2><p>Только для уверенно разделённых голосов.</p></div></header>
+      <div className="speaker-review-list">
+        {review.groups.map((group) => (
+          <label key={group.machine_label}><span>{group.fallback_label}<small>{group.example}</small></span><input placeholder={group.fallback_label} value={assignments[group.machine_label] ?? ""} onChange={(event) => setAssignments((current) => ({ ...current, [group.machine_label]: event.target.value }))} /></label>
+        ))}
+      </div>
+      <div className="review-actions"><button className="primary-button" disabled={isSaving} type="button" onClick={() => onSave(assignments)}>{isSaving ? "Сохраняю…" : "Сохранить транскрипцию"}</button><button className="text-button" disabled={isSaving} type="button" onClick={() => onSkip({})}>Без имён</button></div>
+    </section>
+  );
+}
+
+function EventList({ events, job }: { events: JobEvent[]; job: Job }) {
+  if (!events.length) return <p className="empty-copy">Событий пока нет</p>;
+  return <div className="event-list">{events.map((event, index) => <div className={`event-row ${eventDisplayStatus(event, job)}`} key={`${event.timestamp}-${index}`}><span>{event.progress}%</span><div><strong>{eventDisplayMessage(event, job)}</strong><small>{event.stage}</small></div></div>)}</div>;
+}
+
+function WarningList({ warnings }: { warnings: string[] }) {
+  if (!warnings.length) return <p className="empty-copy">Предупреждений нет</p>;
+  return <div className="warning-list">{warnings.map((warning) => isRawRuntimeDetail(warning) ? <pre key={warning}>{warning}</pre> : <p key={warning}>{warning}</p>)}</div>;
+}
+
+function ArtifactList({ artifacts, client }: { artifacts: Artifact[]; client: ApiClient }) {
+  if (!artifacts.length) return <p className="empty-copy">Артефактов нет</p>;
+  return <div className="artifact-list">{[...artifacts].sort(compareArtifactsForDisplay).map((artifact) => <a href={client.artifactUrl(artifact)} key={artifact.name}><span>{artifactDisplayName(artifact)}</span><small>{formatBytes(artifact.size_bytes)}</small></a>)}</div>;
 }

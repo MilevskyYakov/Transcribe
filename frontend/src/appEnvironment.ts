@@ -148,6 +148,14 @@ export async function openSavedMarkdownPath(path: string, isTauri: boolean): Pro
   await open(path);
 }
 
+export async function revealSavedMarkdownPath(path: string, isTauri: boolean): Promise<void> {
+  if (!isTauri) return;
+  const separator = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+  const directory = separator > 0 ? path.slice(0, separator) : path;
+  const { open } = await import("@tauri-apps/plugin-shell");
+  await open(directory);
+}
+
 function normalizeBridgeValue(value: string | null | undefined, fallback: string): string {
   const trimmed = value?.trim();
   return trimmed ? trimmed.replace(/\/+$/, "") : fallback;

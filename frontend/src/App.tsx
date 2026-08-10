@@ -8,6 +8,7 @@ import {
   markBackendOffline,
   markBackendOnline,
   openSavedMarkdownPath,
+  revealSavedMarkdownPath,
   resolveAppEnvironment,
   restartBackend,
   saveAutosaveMarkdownDir,
@@ -37,12 +38,14 @@ import {
   modelLabel,
   selectedJobDetailsRefreshKey,
   speakerTurns,
+  statusLabel,
   titleValidationMessage,
   titleFromFilename
 } from "./appViewModel";
-import { AppSidebar } from "./components/AppSidebar";
+import { AppSidebar, type AppView } from "./components/AppSidebar";
 import { JobWorkspace } from "./components/JobWorkspace";
 import { ModelsModal } from "./components/ModelsModal";
+import { SettingsPanel } from "./components/SettingsPanel";
 import { UploadPanel } from "./components/UploadPanel";
 import { formatBytes } from "./format";
 import type {
@@ -106,6 +109,9 @@ export function App() {
   const [health, setHealth] = useState<"unknown" | "ok" | "down">("unknown");
   const [healthDetails, setHealthDetails] = useState<HealthPayload | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [currentView, setCurrentView] = useState<AppView>("new");
+  const [previousView, setPreviousView] = useState<AppView>("new");
+  const [searchQuery, setSearchQuery] = useState("");
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [segments, setSegments] = useState<TranscriptSegment[]>([]);
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
@@ -160,6 +166,10 @@ export function App() {
   const selectedJobRefreshKey = selectedJobDetailsRefreshKey(selectedJob);
   const selectedSpeakerTurns = useMemo(() => speakerTurns(segments), [segments]);
   const selectedDiarizationDiagnostic = diarizationDiagnostic(selectedJob);
+  const visibleHistoryJobs = useMemo(() => {
+    const query = searchQuery.trim().toLocaleLowerCase("ru");
+    return jobs.filter((job) => !query || jobDisplayTitle(job).toLocaleLowerCase("ru").includes(query));
+  }, [jobs, searchQuery]);
 
   const refresh = useCallback(async () => {
     try {
@@ -353,6 +363,7 @@ export function App() {
       );
       await refresh();
       setSelectedJobId(job?.job_id ?? null);
+      setCurrentView("job");
       setMediaFile(null);
       setTranscriptionTitle("");
       setNotice("Задача поставлена в очередь");
@@ -545,6 +556,34 @@ export function App() {
     }
   }
 
+  async function showFinalMarkdownInFinder() {
+    const path = finalMarkdownStatus?.path ?? selectedJob?.metadata.saved_markdown_path ?? null;
+    if (!path) return;
+    try {
+      await revealSavedMarkdownPath(path, isManagedApp);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Не удалось показать файл в Finder");
+    }
+  }
+
+  function openNewTranscription() {
+    setCurrentView("new");
+    setSelectedJobId(null);
+    setMediaFile(null);
+    setTranscriptionTitle("");
+    setNotice(null);
+  }
+
+  function openSettings() {
+    if (currentView !== "settings") setPreviousView(currentView);
+    setCurrentView("settings");
+  }
+
+  function selectJob(jobId: string) {
+    setSelectedJobId(jobId);
+    setCurrentView("job");
+  }
+
   async function handleUpdateAction() {
     if (!isManagedApp) {
       setUpdateState({ status: "error", message: "Обновление доступно только в установленном app." });
@@ -607,73 +646,111 @@ export function App() {
   return (
     <main className="app-shell">
       <AppSidebar
-        apiBase={apiBase}
-        batchPaths={batchPaths}
-        cacheDir={cacheDir}
-        ffmpegAvailable={ffmpegAvailable}
-        ffprobeAvailable={ffprobeAvailable}
-        health={health}
-        backendLifecycle={backendLifecycle}
-        isManagedApp={isManagedApp}
-        isSubmitting={isSubmitting}
+        currentView={currentView}
         jobs={jobs}
-        outputDir={outputDir}
+        searchQuery={searchQuery}
         selectedJobId={selectedJobId}
-        selectedModelTitle={selectedModelTitle}
-        updateState={updateState}
-        watchFolder={watchFolder}
-        onApiBaseChange={setApiBase}
-        onBatchPathsChange={setBatchPaths}
-        onModelsOpen={() => setIsModelsOpen(true)}
-        onRefresh={() => void refresh()}
-        onRetryBackendStart={() => void retryBackendStart()}
-        onSelectJob={setSelectedJobId}
-        onUpdateAction={() => void handleUpdateAction()}
-        onCleanupTemp={() => void cleanupTemporaryFiles()}
-        onSubmitBatch={() => void submitBatch()}
-        onSubmitWatchScan={() => void submitWatchScan()}
-        onWatchFolderChange={setWatchFolder}
+        onNewTranscription={openNewTranscription}
+        onOpenHistory={() => setCurrentView("history")}
+        onOpenSettings={openSettings}
+        onSearchQueryChange={setSearchQuery}
+        onSelectJob={selectJob}
       />
 
       <section className="workspace">
-        <UploadPanel
-          canSubmitJob={canSubmitJob}
-          isSubmitting={isSubmitting}
-          mediaFile={mediaFile}
-          selectedModelIsReady={selectedModelIsReady}
-          selectedModelStatusText={selectedModelStatusText}
-          selectedModelTitle={selectedModelTitle}
-          speakerHint={speakerHint}
-          titleError={transcriptionTitleError}
-          transcriptionTitle={transcriptionTitle}
-          onMediaFileChange={handleMediaFileChange}
-          onSpeakerHintChange={setSpeakerHint}
-          onSubmitJob={(event) => void submitJob(event)}
-          onTranscriptionTitleChange={setTranscriptionTitle}
-        />
-        <JobWorkspace
-          artifacts={artifacts}
-          autosaveMarkdownDir={autosaveMarkdownDir}
-          client={client}
-          events={events}
-          finalMarkdownStatus={finalMarkdownStatus}
-          isSelectedJobQuiet={isSelectedJobQuiet}
-          isSavingFinalMarkdown={isSavingFinalMarkdown}
-          notice={notice}
-          now={now}
-          selectedDiarizationDiagnostic={selectedDiarizationDiagnostic}
-          selectedDisplayWarnings={selectedDisplayWarnings}
-          selectedJob={selectedJob}
-          selectedJobDisplayStatus={selectedJobDisplayStatus}
-          selectedLastEventTime={selectedLastEventTime}
-          selectedSpeakerTurns={selectedSpeakerTurns}
-          speakerReview={speakerReview}
-          onChooseFinalMarkdownFolder={() => void chooseFinalMarkdownFolder()}
-          onOpenFinalMarkdown={() => void openFinalMarkdown()}
-          onSaveFinalMarkdownAgain={() => void saveSelectedFinalMarkdown()}
-          onSaveSpeakerAssignments={(assignments) => void saveSpeakerAssignments(assignments, false)}
-          onSkipSpeakerAssignments={(assignments) => void saveSpeakerAssignments(assignments, true)}
-        />
+        {currentView !== "settings" && health === "down" && backendLifecycle?.state === "error" ? (
+          <section className="backend-problem-screen">
+            <p className="eyebrow">Ошибка запуска</p>
+            <h1>Mnema не удалось запустить обработку</h1>
+            <p>{backendLifecycle.human_message || "Локальный сервис недоступен."}</p>
+            <div>
+              <button className="primary-button" type="button" onClick={() => void retryBackendStart()}>Повторить запуск</button>
+              <button className="text-button" type="button" onClick={openSettings}>Открыть диагностику</button>
+            </div>
+          </section>
+        ) : currentView === "new" ? (
+          <UploadPanel
+            autosaveMarkdownDir={autosaveMarkdownDir}
+            canSubmitJob={canSubmitJob}
+            isSubmitting={isSubmitting}
+            mediaFile={mediaFile}
+            selectedModelIsReady={selectedModelIsReady}
+            selectedModelStatusText={selectedModelStatusText}
+            selectedModelTitle={selectedModelTitle}
+            onMediaFileChange={handleMediaFileChange}
+            onOpenSettings={openSettings}
+            onSubmitJob={(event) => void submitJob(event)}
+          />
+        ) : currentView === "history" ? (
+          <section className="history-screen">
+            <header className="screen-header">
+              <div><p className="eyebrow">Архив</p><h1>История</h1><p>Найдите и откройте прежнюю запись.</p></div>
+            </header>
+            <label className="history-search"><span>Поиск по записям</span><input autoFocus value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} /></label>
+            <div className="history-table">
+              {visibleHistoryJobs.map((job) => (
+                <button type="button" key={job.job_id} onClick={() => selectJob(job.job_id)}>
+                  <span><strong>{jobDisplayTitle(job)}</strong><small>{String(job.metadata.saved_markdown_dir ?? job.source_paths[0] ?? "Локальная задача")}</small></span>
+                  <span className={`status-label ${displayStatus(job)}`}>{statusLabel(displayStatus(job))}</span>
+                </button>
+              ))}
+              {!visibleHistoryJobs.length && <p className="empty-copy">Ничего не найдено</p>}
+            </div>
+          </section>
+        ) : currentView === "settings" ? (
+          <SettingsPanel
+            apiBase={apiBase}
+            autosaveMarkdownDir={autosaveMarkdownDir}
+            backendLifecycle={backendLifecycle}
+            batchPaths={batchPaths}
+            cacheDir={cacheDir}
+            ffmpegAvailable={ffmpegAvailable}
+            ffprobeAvailable={ffprobeAvailable}
+            health={health}
+            isManagedApp={isManagedApp}
+            isSubmitting={isSubmitting}
+            outputDir={outputDir}
+            selectedModelTitle={selectedModelTitle}
+            updateState={updateState}
+            watchFolder={watchFolder}
+            onApiBaseChange={setApiBase}
+            onBatchPathsChange={setBatchPaths}
+            onChooseFolder={() => void chooseFinalMarkdownFolder()}
+            onCleanupTemp={() => void cleanupTemporaryFiles()}
+            onDone={() => setCurrentView(previousView === "settings" ? "new" : previousView)}
+            onModelsOpen={() => setIsModelsOpen(true)}
+            onRefresh={() => void refresh()}
+            onRetryBackendStart={() => void retryBackendStart()}
+            onSubmitBatch={() => void submitBatch()}
+            onSubmitWatchScan={() => void submitWatchScan()}
+            onUpdateAction={() => void handleUpdateAction()}
+            onWatchFolderChange={setWatchFolder}
+          />
+        ) : selectedJob && selectedJobDisplayStatus ? (
+          <JobWorkspace
+            artifacts={artifacts}
+            autosaveMarkdownDir={autosaveMarkdownDir}
+            client={client}
+            events={events}
+            finalMarkdownStatus={finalMarkdownStatus}
+            isSavingFinalMarkdown={isSavingFinalMarkdown}
+            notice={notice}
+            selectedDisplayWarnings={selectedDisplayWarnings}
+            selectedJob={selectedJob}
+            selectedJobDisplayStatus={selectedJobDisplayStatus}
+            selectedSpeakerTurns={selectedSpeakerTurns}
+            speakerReview={speakerReview}
+            onChooseFinalMarkdownFolder={() => void chooseFinalMarkdownFolder()}
+            onNewTranscription={openNewTranscription}
+            onOpenFinalMarkdown={() => void openFinalMarkdown()}
+            onSaveFinalMarkdownAgain={() => void saveSelectedFinalMarkdown()}
+            onSaveSpeakerAssignments={(assignments) => void saveSpeakerAssignments(assignments, false)}
+            onShowInFinder={() => void showFinalMarkdownInFinder()}
+            onSkipSpeakerAssignments={(assignments) => void saveSpeakerAssignments(assignments, true)}
+          />
+        ) : (
+          <p className="empty-copy">Выберите задачу в истории.</p>
+        )}
       </section>
 
       {isModelsOpen && (
