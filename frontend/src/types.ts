@@ -34,6 +34,22 @@ export interface DiarizationQuality {
   total_segment_count?: number | null;
 }
 
+export interface DiarizationConfidence {
+  version: number;
+  mode: "reliable_labels" | "transcript_without_labels" | string;
+  reason_codes: string[];
+  metrics: {
+    detected_cluster_count?: number | null;
+    min_centroid_margin?: number | null;
+    dominant_cluster_share?: number | null;
+  };
+  thresholds: {
+    min_centroid_margin?: number | null;
+    max_dominant_cluster_share?: number | null;
+    min_segments_for_imbalance?: number | null;
+  };
+}
+
 export interface JobMetadata {
   display_title?: string | null;
   title?: string | null;
@@ -44,6 +60,7 @@ export interface JobMetadata {
   progress?: number | null;
   events?: JobEvent[];
   diarization_quality?: DiarizationQuality | null;
+  diarization_confidence?: DiarizationConfidence | null;
   saved_markdown_path?: string | null;
   saved_markdown_filename?: string | null;
   saved_markdown_dir?: string | null;

@@ -81,6 +81,15 @@ class DiarizationQualityResponse:
 
 
 @dataclass(frozen=True)
+class DiarizationConfidenceResponse:
+    version: int
+    mode: str
+    reason_codes: list[str]
+    metrics: JsonObject
+    thresholds: JsonObject
+
+
+@dataclass(frozen=True)
 class JobMetadataResponse:
     display_title: str | None = None
     title: str | None = None
@@ -91,6 +100,7 @@ class JobMetadataResponse:
     progress: int | float | None = None
     events: list[JsonObject] | None = None
     diarization_quality: DiarizationQualityResponse | None = None
+    diarization_confidence: DiarizationConfidenceResponse | None = None
     extra: JsonObject = field(default_factory=dict)
 
     def to_payload(self) -> JsonObject:
@@ -180,6 +190,7 @@ class ModelsResponse:
 def metadata_from_payload(payload: JsonObject) -> JobMetadataResponse:
     known_keys = {field.name for field in fields(JobMetadataResponse)} - {"extra"}
     quality = payload.get("diarization_quality")
+    confidence = payload.get("diarization_confidence")
     extra = {key: value for key, value in payload.items() if key not in known_keys}
     return JobMetadataResponse(
         display_title=string_or_none(payload.get("display_title")),
@@ -193,6 +204,9 @@ def metadata_from_payload(payload: JsonObject) -> JobMetadataResponse:
         diarization_quality=diarization_quality_from_payload(quality)
         if isinstance(quality, dict)
         else None,
+        diarization_confidence=diarization_confidence_from_payload(confidence)
+        if isinstance(confidence, dict)
+        else None,
         extra=extra,
     )
 
@@ -205,6 +219,19 @@ def diarization_quality_from_payload(payload: JsonObject) -> DiarizationQualityR
         unmapped_segment_count=int_or_none(payload.get("unmapped_segment_count")),
         speaker_switch_count=int_or_none(payload.get("speaker_switch_count")),
         total_segment_count=int_or_none(payload.get("total_segment_count")),
+    )
+
+
+def diarization_confidence_from_payload(payload: JsonObject) -> DiarizationConfidenceResponse:
+    metrics = payload.get("metrics")
+    thresholds = payload.get("thresholds")
+    reason_codes = payload.get("reason_codes")
+    return DiarizationConfidenceResponse(
+        version=int(payload.get("version") or 1),
+        mode=str(payload.get("mode") or "transcript_without_labels"),
+        reason_codes=[str(code) for code in reason_codes] if isinstance(reason_codes, list) else [],
+        metrics=metrics if isinstance(metrics, dict) else {},
+        thresholds=thresholds if isinstance(thresholds, dict) else {},
     )
 
 

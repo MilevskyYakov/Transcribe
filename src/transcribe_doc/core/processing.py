@@ -16,7 +16,10 @@ from transcribe_doc.asr.factory import build_asr_backend
 from transcribe_doc.asr.transcription_service import TranscriptionResult, TranscriptionService
 from transcribe_doc.core.job_manager import append_job_event, create_job
 from transcribe_doc.diarization.factory import build_diarization_backend
-from transcribe_doc.diarization.quality import collect_diarization_quality_summary
+from transcribe_doc.diarization.quality import (
+    build_diarization_confidence,
+    collect_diarization_quality_summary,
+)
 from transcribe_doc.diarization.speaker_mapper import apply_expected_speaker_mapping
 from transcribe_doc.export.writers import export_all
 from transcribe_doc.ingest.input_resolver import InputResolutionError, resolve_single_input
@@ -233,6 +236,18 @@ def diagnose_diarization_stage(context: ProcessingContext) -> None:
     if _has_diarization_annotations(transcription_result.segments):
         _emit(context, "diarization")
         save_segments(transcription_result.segments, context.job_paths.diarization_dump)
+    if diarization_quality_summary is not None:
+        confidence = build_diarization_confidence(diarization_quality_summary)
+        context.job.metadata["diarization_confidence"] = confidence
+        if confidence["mode"] == "transcript_without_labels":
+            context.transcription_result = transcription_result.__class__(
+                segments=[
+                    _without_speaker_label(segment) for segment in transcription_result.segments
+                ],
+                warnings=transcription_result.warnings,
+                detected_language=transcription_result.detected_language,
+            )
+            return
     if context.speaker_manifest and context.config.diarization.allow_expected_speaker_mapping:
         _emit(context, "speaker_mapping")
         context.transcription_result = transcription_result.__class__(
@@ -353,6 +368,17 @@ def _require_transcription_result(context: ProcessingContext) -> TranscriptionRe
 
 def _has_diarization_annotations(segments: list[TranscriptSegment]) -> bool:
     return any(segment.speaker_label is not None or segment.mapping is not None for segment in segments)
+
+
+def _without_speaker_label(segment: TranscriptSegment) -> TranscriptSegment:
+    return TranscriptSegment(
+        segment_id=segment.segment_id,
+        start_seconds=segment.start_seconds,
+        end_seconds=segment.end_seconds,
+        text_raw=segment.text_raw,
+        text_clean=segment.text_clean,
+        words=segment.words,
+    )
 
 
 def _selected_export_paths(

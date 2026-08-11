@@ -24,6 +24,8 @@ interface JobWorkspaceProps {
   finalMarkdownStatus: FinalMarkdownStatus | null;
   isSavingFinalMarkdown: boolean;
   notice: string | null;
+  selectedDiarizationDiagnostic: string | null;
+  selectedDiarizationTechnicalDiagnostic: string | null;
   selectedDisplayWarnings: string[];
   selectedJob: Job;
   selectedJobDisplayStatus: string;
@@ -46,6 +48,8 @@ export function JobWorkspace({
   finalMarkdownStatus,
   isSavingFinalMarkdown,
   notice,
+  selectedDiarizationDiagnostic,
+  selectedDiarizationTechnicalDiagnostic,
   selectedDisplayWarnings,
   selectedJob,
   selectedJobDisplayStatus,
@@ -90,6 +94,8 @@ export function JobWorkspace({
       isSaving={isSavingFinalMarkdown}
       job={selectedJob}
       notice={notice}
+      diarizationDiagnostic={selectedDiarizationDiagnostic}
+      diarizationTechnicalDiagnostic={selectedDiarizationTechnicalDiagnostic}
       speakerReview={speakerReview}
       turns={selectedSpeakerTurns}
       warnings={selectedDisplayWarnings}
@@ -151,6 +157,8 @@ function ResultScreen({
   isSaving,
   job,
   notice,
+  diarizationDiagnostic,
+  diarizationTechnicalDiagnostic,
   speakerReview,
   turns,
   warnings,
@@ -170,6 +178,8 @@ function ResultScreen({
   isSaving: boolean;
   job: Job;
   notice: string | null;
+  diarizationDiagnostic: string | null;
+  diarizationTechnicalDiagnostic: string | null;
   speakerReview: SpeakerReviewPayload | null;
   turns: SpeakerTurn[];
   warnings: string[];
@@ -192,6 +202,10 @@ function ResultScreen({
         <div><p className="eyebrow">Результат</p><h1>{jobDisplayTitle(job)}</h1></div>
         <span className={warnings.length ? "status-label warning" : "status-label completed"}><Check size={14} /> {warnings.length ? "Готово с предупреждением" : "Готово"}</span>
       </header>
+
+      {job.metadata.diarization_confidence?.mode === "transcript_without_labels" && diarizationDiagnostic && (
+        <p className="notice">{diarizationDiagnostic}</p>
+      )}
 
       {needsSpeakerReview && (
         <SpeakerReviewPanel
@@ -226,7 +240,7 @@ function ResultScreen({
         <summary>Дополнительно</summary>
         <div className="details-grid">
           <section><h2>Процесс</h2><EventList events={events} job={job} /></section>
-          <section><h2>Диагностика</h2><WarningList warnings={warnings} /></section>
+          <section><h2>Диагностика</h2>{diarizationTechnicalDiagnostic && <p>{diarizationTechnicalDiagnostic}</p>}<WarningList warnings={warnings} /></section>
           <section><h2>Артефакты</h2><ArtifactList artifacts={artifacts} client={client} /></section>
         </div>
       </details>
@@ -240,7 +254,7 @@ function TranscriptPreview({ turns }: { turns: SpeakerTurn[] }) {
       <h2>Фрагмент транскрипции</h2>
       {turns.slice(0, 4).map((turn) => (
         <article key={turn.id}>
-          <header><strong>{turn.speakerLabel}</strong><time>{formatSeconds(turn.start_seconds)}–{formatSeconds(turn.end_seconds)}</time></header>
+          <header>{turn.speakerLabel && <strong>{turn.speakerLabel}</strong>}<time>{formatSeconds(turn.start_seconds)}–{formatSeconds(turn.end_seconds)}</time></header>
           <p>{turn.texts.join(" ")}</p>
         </article>
       ))}

@@ -33,6 +33,7 @@ import {
   canStartWithDefaultModel,
   DEFAULT_API_BASE,
   diarizationDiagnostic,
+  diarizationTechnicalDiagnostic,
   displayStatus,
   displayWarnings,
   isActiveJob,
@@ -148,7 +149,6 @@ export function App() {
   const [isWorkspaceDragActive, setIsWorkspaceDragActive] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [transcriptionTitle, setTranscriptionTitle] = useState("");
-  const [speakerHint, setSpeakerHint] = useState("");
   const [selectedModelName, setSelectedModelName] = useState(() => loadWebDefaultModel() ?? "large-v3");
   const [autosaveMarkdownDir, setAutosaveMarkdownDir] = useState(() => loadWebAutosaveMarkdownDir());
   const [finalMarkdownStatus, setFinalMarkdownStatus] = useState<FinalMarkdownStatus | null>(null);
@@ -198,6 +198,7 @@ export function App() {
   const selectedJobRefreshKey = selectedJobDetailsRefreshKey(selectedJob);
   const selectedSpeakerTurns = useMemo(() => speakerTurns(segments), [segments]);
   const selectedDiarizationDiagnostic = diarizationDiagnostic(selectedJob);
+  const selectedDiarizationTechnicalDiagnostic = diarizationTechnicalDiagnostic(selectedJob);
   const visibleHistoryJobs = useMemo(() => {
     const query = searchQuery.trim().toLocaleLowerCase("ru");
     const batchJobIds = new Set(
@@ -571,7 +572,7 @@ export function App() {
       const job = await client.createJob(
         mediaSelection.file ?? mediaSelection.path ?? "",
         transcriptionTitle,
-        speakerHint,
+        "",
         selectedModel?.backend,
         selectedModel?.name ?? selectedModelName,
         jobOutputDirectory ?? undefined
@@ -617,7 +618,7 @@ export function App() {
         media,
         transcriptionTitle,
         jobOutputDirectory,
-        speakerHint,
+        "",
         selectedModel?.backend,
         selectedModel?.name ?? selectedModelName
       );
@@ -1058,6 +1059,8 @@ export function App() {
             finalMarkdownStatus={finalMarkdownStatus}
             isSavingFinalMarkdown={isSavingFinalMarkdown}
             notice={notice}
+            selectedDiarizationDiagnostic={selectedDiarizationDiagnostic}
+            selectedDiarizationTechnicalDiagnostic={selectedDiarizationTechnicalDiagnostic}
             selectedDisplayWarnings={selectedDisplayWarnings}
             selectedJob={selectedJob}
             selectedJobDisplayStatus={selectedJobDisplayStatus}

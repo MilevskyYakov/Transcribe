@@ -28,8 +28,11 @@ class SpeakerReviewGroup:
 
 
 def build_speaker_review_payload(job: JsonObject, segments: list[JsonObject]) -> JsonObject:
-    groups = build_speaker_groups(job, segments)
     metadata = _metadata(job)
+    confidence = metadata.get("diarization_confidence")
+    if isinstance(confidence, dict) and confidence.get("mode") == "transcript_without_labels":
+        return {"status": "not_required", "groups": [], "suggestions": []}
+    groups = build_speaker_groups(job, segments)
     raw_review = metadata.get("speaker_review")
     review = raw_review if isinstance(raw_review, dict) else {}
     status = str(review.get("status") or ("pending" if groups else "not_required"))
@@ -41,6 +44,9 @@ def build_speaker_review_payload(job: JsonObject, segments: list[JsonObject]) ->
 
 
 def build_speaker_groups(job: JsonObject, segments: list[JsonObject]) -> list[SpeakerReviewGroup]:
+    confidence = _metadata(job).get("diarization_confidence")
+    if isinstance(confidence, dict) and confidence.get("mode") == "transcript_without_labels":
+        return []
     assignments = speaker_assignments(job)
     suggestions = _speaker_suggestions(job)
     ordered_labels: list[str] = []
