@@ -33,7 +33,7 @@ Jobs are `JobResponse` objects:
 - `metadata: JobMetadataResponse`
 - `warnings: string[]`
 
-Known metadata fields include `display_title`, `source_filename`, `execution`, `current_stage`, `last_message`, `progress`, `events`, and `diarization_quality`. Unknown metadata may still be carried for backward compatibility, but app-facing diagnostics should be promoted to explicit fields.
+Known metadata fields include `display_title`, `source_filename`, `execution`, `current_stage`, `last_message`, `progress`, `events`, `diarization_quality`, and versioned `diarization_confidence`. Confidence mode is `reliable_labels` or `transcript_without_labels`; degraded jobs remain completed and return chronological segments without speaker labels. Unknown metadata may still be carried for backward compatibility, but app-facing diagnostics should be promoted to explicit fields.
 
 ### `GET /jobs/:id/transcript`
 

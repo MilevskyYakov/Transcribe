@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 from transcribe_doc.app.config import AppConfig, ExportSection, SummarySection
-from transcribe_doc.app.models import TranscriptSegment
+from transcribe_doc.app.models import SpeakerMapping, TranscriptSegment
 from transcribe_doc.asr.base import AsrBackend, AsrTranscription
 from transcribe_doc.core import processing
 
@@ -119,3 +119,64 @@ def test_process_single_file_failure_uses_last_stage_progress(tmp_path: Path, mo
         ("failed", 20),
     ]
     assert result.message == "ffmpeg exploded"
+
+
+def test_degraded_diarization_keeps_chronology_without_labels(tmp_path: Path, monkeypatch) -> None:
+    source_file = tmp_path / "sample.mp3"
+    source_file.write_bytes(b"fake-audio")
+
+    class LowConfidenceDiarization:
+        def diarize(self, media_path, segments):
+            segment = segments[0]
+            return [
+                TranscriptSegment(
+                    segment_id=segment.segment_id,
+                    start_seconds=segment.start_seconds,
+                    end_seconds=segment.end_seconds,
+                    text_raw=segment.text_raw,
+                    text_clean=segment.text_clean,
+                    speaker_label="SPEAKER_00",
+                    mapping=SpeakerMapping(
+                        machine_label="SPEAKER_00",
+                        display_label="SPEAKER_00",
+                        metadata={
+                            "backend": "resemblyzer",
+                            "cluster_size": 1,
+                            "detected_cluster_count": 1,
+                            "centroid_similarity_margin": 0.04,
+                        },
+                    ),
+                )
+            ]
+
+    monkeypatch.setattr(processing, "probe_media", lambda path: None)
+    monkeypatch.setattr(
+        processing,
+        "normalize_media",
+        lambda source, target, *, sample_rate, mono: target.write_bytes(b"wav"),
+    )
+    monkeypatch.setattr(processing, "build_alignment_backend", lambda config: None)
+
+    result = processing.process_single_file(
+        source_file,
+        output_root=tmp_path / "output",
+        config=_stage_test_config(),
+        job_id="job-degraded",
+        speaker_hint="Алексей",
+        formats="txt",
+        asr_backend_factory=lambda config: FakeAsrBackend(),
+        diarization_backend_factory=lambda config, speaker_manifest: LowConfidenceDiarization(),
+    )
+
+    assert result.exit_code == 0
+    assert result.job is not None
+    assert result.job.status.value == "completed"
+    assert result.job.metadata["diarization_confidence"]["mode"] == "transcript_without_labels"
+    assert result.job_paths is not None
+    public_segments = json.loads(result.job_paths.segments_json.read_text(encoding="utf-8"))
+    assert public_segments[0]["speaker_label"] is None
+    assert public_segments[0]["mapping"] is None
+    assert result.job.metadata["diarization_quality"]["min_centroid_similarity_margin"] == 0.04
+    assert result.job_paths.transcript_clean_txt.read_text(encoding="utf-8") == (
+        "[00:00.0-00:01.0] Привет.\n"
+    )

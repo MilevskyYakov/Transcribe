@@ -256,6 +256,28 @@ describe("transcript presentation", () => {
     expect(turns.map((turn) => turn.speakerLabel)).toEqual(["Спикер 1", "Спикер 2"]);
   });
 
+  it("keeps degraded transcript chunks chronological and unlabeled", () => {
+    const turns = speakerTurns([
+      {
+        segment_id: "seg-001",
+        start_seconds: 0,
+        end_seconds: 10,
+        text_raw: "первая часть",
+        text_clean: "первая часть"
+      },
+      {
+        segment_id: "seg-002",
+        start_seconds: 10,
+        end_seconds: 20,
+        text_raw: "ответ",
+        text_clean: "ответ"
+      }
+    ]);
+
+    expect(turns.map((turn) => turn.speakerLabel)).toEqual(["", ""]);
+    expect(turns.map((turn) => turn.id)).toEqual(["seg-001", "seg-002"]);
+  });
+
   it("keeps word diagnostics inside grouped speaker turns", () => {
     const turns = speakerTurns([
       {
@@ -305,6 +327,29 @@ describe("transcript presentation", () => {
     };
 
     expect(diarizationDiagnostic(job)).toContain("margin 0.05");
+  });
+
+  it("explains degraded diarization without technical ids", () => {
+    const job: Job = {
+      job_id: "job-1",
+      source_paths: [],
+      status: "completed",
+      artifacts: {},
+      metadata: {
+        diarization_confidence: {
+          version: 1,
+          mode: "transcript_without_labels",
+          reason_codes: ["low_cluster_separation"],
+          metrics: {},
+          thresholds: {}
+        }
+      },
+      warnings: []
+    };
+
+    expect(diarizationDiagnostic(job)).toBe(
+      "Голоса разделены неуверенно. Текст показан по хронологии без подписей спикеров."
+    );
   });
 
   it("presents old diarization-only warning jobs as completed in the app", () => {

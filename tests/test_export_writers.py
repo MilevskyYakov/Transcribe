@@ -130,6 +130,26 @@ def test_final_markdown_uses_canonical_title_times_and_speaker_labels(tmp_path: 
     assert "SPEAKER_01" not in content
 
 
+def test_final_markdown_omits_speaker_placeholder_for_unlabeled_transcript(tmp_path: Path) -> None:
+    path = tmp_path / "final.md"
+
+    write_final_text_md(
+        path,
+        [
+            TranscriptSegment(
+                segment_id="seg-0000",
+                start_seconds=3.2,
+                end_seconds=17.4,
+                text_raw="hello",
+                text_clean="Привет.",
+            )
+        ],
+        title="Запись",
+    )
+
+    assert "[00:00:03–00:00:17] Привет." in path.read_text(encoding="utf-8")
+
+
 def test_summary_writes_markdown_and_json(tmp_path: Path) -> None:
     segments = [
         TranscriptSegment(

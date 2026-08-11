@@ -258,7 +258,7 @@ export function speakerTurns(segments: TranscriptSegment[]): SpeakerTurn[] {
     const speakerLabel = displaySpeakerLabel(segment.speaker_label);
     const text = (segment.text_clean || segment.text_raw).trim();
     const previous = turns[turns.length - 1];
-    if (previous && previous.speakerLabel === speakerLabel) {
+    if (speakerLabel && previous?.speakerLabel === speakerLabel) {
       previous.end_seconds = segment.end_seconds;
       if (text) previous.texts.push(text);
       previous.segments.push(segment);
@@ -278,13 +278,16 @@ export function speakerTurns(segments: TranscriptSegment[]): SpeakerTurn[] {
 
 export function displaySpeakerLabel(value: string | null | undefined): string {
   const label = value?.trim();
-  if (!label) return "Спикер";
+  if (!label) return "";
   if (!label.startsWith("SPEAKER_")) return label;
   const suffix = label.slice("SPEAKER_".length);
   return /^\d+$/.test(suffix) ? `Спикер ${Number(suffix) + 1}` : "Спикер";
 }
 
 export function diarizationDiagnostic(job: Job | null): string | null {
+  if (job?.metadata?.diarization_confidence?.mode === "transcript_without_labels") {
+    return "Голоса разделены неуверенно. Текст показан по хронологии без подписей спикеров.";
+  }
   const quality = job?.metadata?.diarization_quality;
   if (!quality) return null;
 
@@ -304,6 +307,23 @@ export function diarizationDiagnostic(job: Job | null): string | null {
   }
 
   return "Диаризация: диагностические метрики сохранены, критичных предупреждений нет.";
+}
+
+export function diarizationTechnicalDiagnostic(job: Job | null): string | null {
+  const quality = job?.metadata?.diarization_quality;
+  if (!quality) return null;
+  const values = [
+    typeof quality.detected_cluster_count_max === "number"
+      ? `Кластеры: ${quality.detected_cluster_count_max}`
+      : null,
+    typeof quality.min_centroid_similarity_margin === "number"
+      ? `минимальный margin: ${quality.min_centroid_similarity_margin.toFixed(2)}`
+      : null,
+    typeof quality.dominant_cluster_share === "number"
+      ? `крупнейший кластер: ${Math.round(quality.dominant_cluster_share * 100)}%`
+      : null
+  ].filter(Boolean);
+  return values.join(" · ") || null;
 }
 
 export function artifactDisplayName(artifact: Artifact): string {

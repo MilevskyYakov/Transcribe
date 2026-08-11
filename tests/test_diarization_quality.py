@@ -1,5 +1,8 @@
 from transcribe_doc.app.models import SpeakerMapping, TranscriptSegment
-from transcribe_doc.diarization.quality import collect_diarization_quality_summary
+from transcribe_doc.diarization.quality import (
+    build_diarization_confidence,
+    collect_diarization_quality_summary,
+)
 
 
 def test_collect_diarization_quality_summary_aggregates_resemblyzer_metrics() -> None:
@@ -129,3 +132,40 @@ def test_collect_diarization_quality_summary_returns_none_without_resemblyzer_me
     )
 
     assert summary is None
+
+
+def test_diarization_confidence_gate_is_precision_first() -> None:
+    reliable = build_diarization_confidence(
+        {
+            "segment_count": 6,
+            "detected_cluster_count_max": 2,
+            "min_centroid_similarity_margin": 0.21,
+            "dominant_cluster_share": 0.5,
+        }
+    )
+    degraded = build_diarization_confidence(
+        {
+            "segment_count": 5,
+            "detected_cluster_count_max": 2,
+            "min_centroid_similarity_margin": 0.04,
+            "dominant_cluster_share": 0.8,
+        }
+    )
+
+    assert reliable["mode"] == "reliable_labels"
+    assert reliable["reason_codes"] == []
+    assert degraded == {
+        "version": 1,
+        "mode": "transcript_without_labels",
+        "reason_codes": ["low_cluster_separation", "imbalanced_clusters"],
+        "metrics": {
+            "detected_cluster_count": 2,
+            "min_centroid_margin": 0.04,
+            "dominant_cluster_share": 0.8,
+        },
+        "thresholds": {
+            "min_centroid_margin": 0.1,
+            "max_dominant_cluster_share": 0.8,
+            "min_segments_for_imbalance": 4,
+        },
+    }

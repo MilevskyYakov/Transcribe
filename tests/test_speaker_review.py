@@ -64,3 +64,12 @@ def test_speaker_assignments_persist_and_relabel_transcript_payloads() -> None:
         "machine_label": "SPEAKER_00",
         "display_label": "Яков",
     }
+
+
+def test_degraded_diarization_never_enters_speaker_review() -> None:
+    job = {"metadata": {"diarization_confidence": {"mode": "transcript_without_labels"}}}
+
+    payload = build_speaker_review_payload(job, _segments())
+
+    assert payload["status"] == "not_required"
+    assert payload["groups"] == []

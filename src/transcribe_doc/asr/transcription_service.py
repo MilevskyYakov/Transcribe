@@ -9,9 +9,8 @@ from transcribe_doc.alignment.base import AlignmentBackend
 from transcribe_doc.app.models import TranscriptSegment
 from transcribe_doc.asr.base import AsrBackend
 from transcribe_doc.diarization.base import DiarizationBackend
-from transcribe_doc.postprocess.transcript_cleaner import apply_conservative_cleanup
 from transcribe_doc.postprocess.segmenter import split_segments_on_long_pauses
-from transcribe_doc.postprocess.speaker_smoothing import smooth_speaker_turns
+from transcribe_doc.postprocess.transcript_cleaner import apply_conservative_cleanup
 from transcribe_doc.postprocess.word_quality import apply_word_quality_checks
 
 
@@ -56,7 +55,6 @@ class TranscriptionService:
             except Exception as error:  # noqa: BLE001
                 warnings.append(f"Diarization fallback activated: {error}")
 
-        segments = smooth_speaker_turns(segments)
         segments = apply_word_quality_checks(segments)
         cleaned_segments = apply_conservative_cleanup(segments)
         return TranscriptionResult(

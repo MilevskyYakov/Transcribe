@@ -11,9 +11,9 @@ from transcribe_doc.core.batch import BatchItemResult, BatchResult
 from transcribe_doc.core.processing import ProcessingResult
 from transcribe_doc.ingest.manifest_loader import speaker_hint_to_manifest
 from transcribe_doc.service import job_endpoints, model_endpoints
-from transcribe_doc.service.responses import job_to_response
-from transcribe_doc.service.request_parsing import payload_from_multipart_form
 from transcribe_doc.service import server as service_server
+from transcribe_doc.service.request_parsing import payload_from_multipart_form
+from transcribe_doc.service.responses import job_to_response
 from transcribe_doc.service.server import build_server, list_artifacts, list_events, list_jobs
 from transcribe_doc.storage.artifact_store import save_job
 
@@ -117,6 +117,13 @@ def test_job_response_uses_typed_metadata_contract() -> None:
                 "min_centroid_similarity_margin": 0.04,
                 "dominant_cluster_share": 0.9,
             },
+            "diarization_confidence": {
+                "version": 1,
+                "mode": "transcript_without_labels",
+                "reason_codes": ["fewer_than_two_clusters"],
+                "metrics": {"detected_cluster_count": 1},
+                "thresholds": {"min_centroid_margin": 0.1},
+            },
         },
         warnings=["Diarization quality warning: low margin"],
     )
@@ -131,6 +138,13 @@ def test_job_response_uses_typed_metadata_contract() -> None:
         "detected_cluster_count_max": 1,
         "min_centroid_similarity_margin": 0.04,
         "dominant_cluster_share": 0.9,
+    }
+    assert response["metadata"]["diarization_confidence"] == {
+        "version": 1,
+        "mode": "transcript_without_labels",
+        "reason_codes": ["fewer_than_two_clusters"],
+        "metrics": {"detected_cluster_count": 1},
+        "thresholds": {"min_centroid_margin": 0.1},
     }
 
 

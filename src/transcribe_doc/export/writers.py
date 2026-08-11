@@ -46,10 +46,9 @@ def write_txt(path: Path, segments: Iterable[TranscriptSegment]) -> Path:
 def write_md(path: Path, segments: Iterable[TranscriptSegment]) -> Path:
     lines = ["# Transcript", ""]
     for segment in segments:
-        lines.append(
-            f"**{_speaker(segment)}** "
-            f"`{_format_time(segment.start_seconds)}-{_format_time(segment.end_seconds)}`"
-        )
+        speaker = _speaker(segment)
+        prefix = f"**{speaker}** " if speaker else ""
+        lines.append(f"{prefix}`{_format_time(segment.start_seconds)}-{_format_time(segment.end_seconds)}`")
         lines.append("")
         lines.append(segment.text_clean or segment.text_raw)
         lines.append("")
@@ -66,9 +65,11 @@ def write_final_text_md(
     heading = title.strip() if title and title.strip() else "Готовый текст"
     lines = [f"# {heading}", "", "## Транскрипция", ""]
     for segment in segments:
+        speaker = _final_speaker(segment)
+        prefix = f"{speaker}: " if speaker else ""
         lines.append(
             f"[{_format_final_time(segment.start_seconds)}–{_format_final_time(segment.end_seconds)}] "
-            f"{_final_speaker(segment)}: {segment.text_clean or segment.text_raw}"
+            f"{prefix}{segment.text_clean or segment.text_raw}"
         )
         lines.append("")
     path.write_text("\n".join(lines).strip() + "\n", encoding="utf-8")
@@ -78,12 +79,14 @@ def write_final_text_md(
 def write_srt(path: Path, segments: Iterable[TranscriptSegment]) -> Path:
     blocks = []
     for index, segment in enumerate(segments, start=1):
+        speaker = _speaker(segment)
+        prefix = f"{speaker}: " if speaker else ""
         blocks.append(
             "\n".join(
                 [
                     str(index),
                     f"{_format_srt_time(segment.start_seconds)} --> {_format_srt_time(segment.end_seconds)}",
-                    f"{_speaker(segment)}: {segment.text_clean or segment.text_raw}",
+                    f"{prefix}{segment.text_clean or segment.text_raw}",
                 ]
             )
         )
@@ -162,14 +165,16 @@ def write_pdf(path: Path, segments: Iterable[TranscriptSegment]) -> Path:
 
 
 def _format_plain_segment(segment: TranscriptSegment) -> str:
+    speaker = _speaker(segment)
+    prefix = f"{speaker}: " if speaker else ""
     return (
         f"[{_format_time(segment.start_seconds)}-{_format_time(segment.end_seconds)}] "
-        f"{_speaker(segment)}: {segment.text_clean or segment.text_raw}"
+        f"{prefix}{segment.text_clean or segment.text_raw}"
     )
 
 
 def _speaker(segment: TranscriptSegment) -> str:
-    return segment.speaker_label or "SPEAKER"
+    return segment.speaker_label or ""
 
 
 def _final_speaker(segment: TranscriptSegment) -> str:
@@ -179,7 +184,7 @@ def _final_speaker(segment: TranscriptSegment) -> str:
         else (segment.speaker_label or "").strip()
     )
     if not label:
-        return "Спикер"
+        return ""
     if label.startswith("SPEAKER_"):
         suffix = label.removeprefix("SPEAKER_")
         if suffix.isdigit():

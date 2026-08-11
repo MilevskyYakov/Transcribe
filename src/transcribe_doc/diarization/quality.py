@@ -9,6 +9,7 @@ from transcribe_doc.app.models import TranscriptSegment
 MIN_DIARIZATION_MARGIN_WARNING = 0.1
 MIN_DIARIZATION_CLUSTER_IMBALANCE_WARNING = 0.8
 MIN_SEGMENTS_FOR_CLUSTER_IMBALANCE_WARNING = 4
+DIARIZATION_CONFIDENCE_VERSION = 1
 
 
 def collect_diarization_quality_summary(
@@ -52,6 +53,43 @@ def collect_diarization_quality_summary(
         "dominant_cluster_share": (
             _rounded(max(cluster_sizes) / segment_count) if cluster_sizes else None
         ),
+    }
+
+
+def build_diarization_confidence(summary: dict[str, Any]) -> dict[str, Any]:
+    """Classify Resemblyzer labels using the calibrated conservative gate."""
+    detected_cluster_count = summary.get("detected_cluster_count_max")
+    min_margin = summary.get("min_centroid_similarity_margin")
+    dominant_cluster_share = summary.get("dominant_cluster_share")
+    segment_count = summary.get("segment_count")
+    reason_codes: list[str] = []
+
+    if not isinstance(detected_cluster_count, int) or detected_cluster_count < 2:
+        reason_codes.append("fewer_than_two_clusters")
+    if not isinstance(min_margin, (int, float)) or min_margin < MIN_DIARIZATION_MARGIN_WARNING:
+        reason_codes.append("low_cluster_separation")
+    if (
+        isinstance(segment_count, int)
+        and segment_count >= MIN_SEGMENTS_FOR_CLUSTER_IMBALANCE_WARNING
+        and isinstance(dominant_cluster_share, (int, float))
+        and dominant_cluster_share >= MIN_DIARIZATION_CLUSTER_IMBALANCE_WARNING
+    ):
+        reason_codes.append("imbalanced_clusters")
+
+    return {
+        "version": DIARIZATION_CONFIDENCE_VERSION,
+        "mode": "transcript_without_labels" if reason_codes else "reliable_labels",
+        "reason_codes": reason_codes,
+        "metrics": {
+            "detected_cluster_count": detected_cluster_count,
+            "min_centroid_margin": min_margin,
+            "dominant_cluster_share": dominant_cluster_share,
+        },
+        "thresholds": {
+            "min_centroid_margin": MIN_DIARIZATION_MARGIN_WARNING,
+            "max_dominant_cluster_share": MIN_DIARIZATION_CLUSTER_IMBALANCE_WARNING,
+            "min_segments_for_imbalance": MIN_SEGMENTS_FOR_CLUSTER_IMBALANCE_WARNING,
+        },
     }
 
 
