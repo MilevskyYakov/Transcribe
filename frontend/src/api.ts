@@ -1,5 +1,6 @@
 import type {
   Artifact,
+  BatchSession,
   FinalMarkdownStatus,
   HealthPayload,
   Job,
@@ -27,6 +28,77 @@ export class ApiClient {
   async listJobs(): Promise<Job[]> {
     const payload = await this.get<{ jobs: Job[] }>("/jobs");
     return payload.jobs;
+  }
+
+  async listBatchSessions(): Promise<BatchSession[]> {
+    const payload = await this.get<{ batch_sessions: BatchSession[] }>("/batch-sessions");
+    return payload.batch_sessions;
+  }
+
+  async createBatchSession(
+    items: { inputPath?: string; sourceName: string }[],
+    commonOutputDir?: string | null
+  ): Promise<BatchSession> {
+    const response = await fetch(`${this.baseUrl}/batch-sessions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        items: items.map((item) => ({ input_path: item.inputPath, source_name: item.sourceName })),
+        common_output_dir: commonOutputDir || undefined
+      })
+    });
+    const payload = await this.parseResponse<{ batch_session: BatchSession }>(response);
+    return payload.batch_session;
+  }
+
+  async updateBatchSessionOutput(sessionId: string, commonOutputDir: string): Promise<BatchSession> {
+    const response = await fetch(
+      `${this.baseUrl}/batch-sessions/${encodeURIComponent(sessionId)}/common-output`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ common_output_dir: commonOutputDir })
+      }
+    );
+    const payload = await this.parseResponse<{ batch_session: BatchSession }>(response);
+    return payload.batch_session;
+  }
+
+  async submitBatchSessionItem(
+    sessionId: string,
+    itemId: string,
+    media: File | string,
+    displayTitle: string,
+    finalMarkdownDir: string,
+    speakerHint?: string,
+    asrBackend?: string,
+    asrModelName?: string
+  ): Promise<{ batch_session: BatchSession; job: Job }> {
+    const url = `${this.baseUrl}/batch-sessions/${encodeURIComponent(sessionId)}/items/${encodeURIComponent(itemId)}/submit`;
+    if (typeof media === "string") {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          input_path: media,
+          display_title: displayTitle,
+          final_markdown_dir: finalMarkdownDir,
+          speaker_hint: speakerHint?.trim() || undefined,
+          asr_backend: asrBackend,
+          asr_model_name: asrModelName
+        })
+      });
+      return this.parseResponse(response);
+    }
+    const formData = new FormData();
+    formData.append("media", media);
+    formData.append("display_title", displayTitle);
+    formData.append("final_markdown_dir", finalMarkdownDir);
+    if (speakerHint?.trim()) formData.append("speaker_hint", speakerHint.trim());
+    if (asrBackend) formData.append("asr_backend", asrBackend);
+    if (asrModelName) formData.append("asr_model_name", asrModelName);
+    const response = await fetch(url, { method: "POST", body: formData });
+    return this.parseResponse(response);
   }
 
   async getJob(jobId: string): Promise<Job> {

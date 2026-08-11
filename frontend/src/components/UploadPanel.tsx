@@ -10,7 +10,7 @@ export const SUPPORTED_MEDIA_EXTENSIONS = [
 
 const SUPPORTED_MEDIA_EXTENSION_SET = new Set<string>(SUPPORTED_MEDIA_EXTENSIONS);
 
-const SUPPORTED_MEDIA_ACCEPT = [
+export const SUPPORTED_MEDIA_ACCEPT = [
   "audio/*",
   "video/*",
   ...Array.from(SUPPORTED_MEDIA_EXTENSIONS, (extension) => `.${extension}`)
@@ -36,6 +36,7 @@ interface UploadPanelProps {
   selectedModelIsReady: boolean;
   selectedModelStatusText: string;
   selectedModelTitle: string;
+  title: string;
   uploadError: string | null;
   onChooseFiles: () => void;
   onChooseOutputDirectory: () => void;
@@ -43,6 +44,7 @@ interface UploadPanelProps {
   onFilesSelected: (files: File[]) => void;
   onOpenSettings: () => void;
   onSubmitJob: (event: FormEvent) => void;
+  onTitleChange: (value: string) => void;
 }
 
 export function UploadPanel({
@@ -56,13 +58,15 @@ export function UploadPanel({
   selectedModelIsReady,
   selectedModelStatusText,
   selectedModelTitle,
+  title,
   uploadError,
   onChooseFiles,
   onChooseOutputDirectory,
   onClearSelection,
   onFilesSelected,
   onOpenSettings,
-  onSubmitJob
+  onSubmitJob,
+  onTitleChange
 }: UploadPanelProps) {
   const hasSelection = Boolean(mediaFilename) || batchFilenames.length > 0;
   const batchLabel = batchFilenames.length === 2 ? "2 файла" : `${batchFilenames.length} файлов`;
@@ -99,6 +103,12 @@ export function UploadPanel({
         <section className="file-setup">
           <button className="remove-file" aria-label="Убрать файл" type="button" onClick={onClearSelection}><X size={16} /> Убрать</button>
           {batchFilenames.length > 0 && <p className="batch-entry-copy">Пакет · {batchLabel}. Настройка очереди продолжится в пакетном экране.</p>}
+          {mediaFilename && (
+            <label className="title-field">
+              <span>Название</span>
+              <input value={title} onChange={(event) => onTitleChange(event.target.value)} />
+            </label>
+          )}
           <div className="destination-row">
             <FolderOpen size={18} />
             <span><small>Сохранить в</small><strong>{outputDirectory ?? "Папка не выбрана"}</strong></span>

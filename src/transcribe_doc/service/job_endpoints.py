@@ -11,7 +11,16 @@ from transcribe_doc.core.batch import process_batch, scan_watch_folder
 from transcribe_doc.core.job_manager import create_job, persist_job
 from transcribe_doc.core.processing import process_single_file
 from transcribe_doc.ingest.input_resolver import InputResolutionError, resolve_single_input
-from transcribe_doc.storage.paths import build_job_paths
+from transcribe_doc.service.batch_session_store import (
+    BATCH_SESSION_LOCK,
+    batch_session_response,
+    create_batch_session,
+    find_batch_item,
+    list_batch_sessions,
+    load_batch_session,
+    load_batch_session_payload,
+    write_batch_session,
+)
 from transcribe_doc.service.contracts import (
     ArtifactsResponse,
     EventsResponse,
@@ -26,8 +35,8 @@ from transcribe_doc.service.job_store import (
     list_jobs,
     load_job,
     read_json_file,
-    write_job_payload,
     write_failed_job_payload,
+    write_job_payload,
 )
 from transcribe_doc.service.responses import (
     batch_to_response,
@@ -43,6 +52,7 @@ from transcribe_doc.storage.final_markdown import (
     title_derived_markdown_filename,
     validate_final_markdown_dir,
 )
+from transcribe_doc.storage.paths import build_job_paths
 from transcribe_doc.storage.speaker_review import (
     apply_speaker_assignments_to_segment_payloads,
     build_speaker_review_payload,
@@ -56,6 +66,163 @@ from transcribe_doc.storage.temp_cleanup import (
 
 def list_jobs_endpoint(ctx: Any) -> ApiResponse:
     return json_response({"jobs": list_jobs(ctx.output_root)})
+
+
+def list_batch_sessions_endpoint(ctx: Any) -> ApiResponse:
+    return json_response({"batch_sessions": list_batch_sessions(ctx.output_root)})
+
+
+def get_batch_session_endpoint(ctx: Any, session_id: str) -> ApiResponse:
+    try:
+        session = load_batch_session(ctx.output_root, session_id)
+    except ValueError as error:
+        return json_response({"error": str(error)}, HTTPStatus.BAD_REQUEST)
+    if session is None:
+        return json_response({"error": "batch_session_not_found"}, HTTPStatus.NOT_FOUND)
+    return json_response({"batch_session": session})
+
+
+def create_batch_session_endpoint(ctx: Any) -> ApiResponse:
+    try:
+        request = ctx.read_json_object()
+        raw_items = request.get("items")
+        if not isinstance(raw_items, list) or not all(isinstance(item, dict) for item in raw_items):
+            raise ValueError("'items' must be a non-empty list of objects.")
+        raw_common_output_dir = request.get("common_output_dir")
+        common_output_dir = (
+            str(validate_final_markdown_dir(raw_common_output_dir))
+            if isinstance(raw_common_output_dir, str) and raw_common_output_dir.strip()
+            else None
+        )
+        session = create_batch_session(
+            ctx.output_root,
+            raw_items,
+            common_output_dir=common_output_dir,
+        )
+    except InputResolutionError as error:
+        return json_response({"error": str(error)}, HTTPStatus.UNPROCESSABLE_ENTITY)
+    except ValueError as error:
+        return json_response({"error": str(error)}, HTTPStatus.BAD_REQUEST)
+    return json_response({"batch_session": session}, HTTPStatus.CREATED)
+
+
+def update_batch_session_output_endpoint(ctx: Any, session_id: str) -> ApiResponse:
+    with BATCH_SESSION_LOCK:
+        return _update_batch_session_output_endpoint(ctx, session_id)
+
+
+def _update_batch_session_output_endpoint(ctx: Any, session_id: str) -> ApiResponse:
+    try:
+        session = load_batch_session_payload(ctx.output_root, session_id)
+        if session is None:
+            return json_response({"error": "batch_session_not_found"}, HTTPStatus.NOT_FOUND)
+        request = ctx.read_json_object()
+        raw_output_dir = request.get("common_output_dir")
+        if not isinstance(raw_output_dir, str) or not raw_output_dir.strip():
+            raise ValueError("'common_output_dir' is required.")
+        session["common_output_dir"] = str(validate_final_markdown_dir(raw_output_dir))
+        write_batch_session(ctx.output_root, session)
+    except ValueError as error:
+        return json_response({"error": str(error)}, HTTPStatus.BAD_REQUEST)
+    return json_response({"batch_session": batch_session_response(ctx.output_root, session)})
+
+
+def submit_batch_session_item_endpoint(ctx: Any, session_id: str, item_id: str) -> ApiResponse:
+    with BATCH_SESSION_LOCK:
+        return _submit_batch_session_item_endpoint(ctx, session_id, item_id)
+
+
+def _submit_batch_session_item_endpoint(ctx: Any, session_id: str, item_id: str) -> ApiResponse:
+    try:
+        session = load_batch_session_payload(ctx.output_root, session_id)
+        if session is None:
+            return json_response({"error": "batch_session_not_found"}, HTTPStatus.NOT_FOUND)
+        item = find_batch_item(session, item_id)
+        if item is None:
+            return json_response({"error": "batch_item_not_found"}, HTTPStatus.NOT_FOUND)
+        current = next(
+            entry
+            for entry in batch_session_response(ctx.output_root, session)["items"]
+            if entry["item_id"] == item_id
+        )
+        if current["status"] in {"processing", "ready"}:
+            raise ValueError("Only unconfigured or failed batch items can be started.")
+        if current["status"] == "configure":
+            first_unconfigured = next(
+                entry
+                for entry in batch_session_response(ctx.output_root, session)["items"]
+                if entry["status"] == "configure"
+            )
+            if first_unconfigured["item_id"] != item_id:
+                raise ValueError("Configure batch items in order.")
+
+        request = _read_batch_item_request(ctx)
+        raw_input_path = request.get("input_path") or item.get("input_path")
+        if not isinstance(raw_input_path, str) or not raw_input_path.strip():
+            raise ValueError("Batch item media is no longer available. Choose the files again.")
+        resolved_input = resolve_single_input(raw_input_path)
+        display_title = display_title_from_payload(request) or str(item["display_title"])
+        raw_output_dir = (
+            request.get("final_markdown_dir")
+            or item.get("output_dir")
+            or session.get("common_output_dir")
+        )
+        if not isinstance(raw_output_dir, str) or not raw_output_dir.strip():
+            raise ValueError("Выберите папку для сохранения транскрипций")
+        final_markdown_dir = str(validate_final_markdown_dir(raw_output_dir))
+        job_config = config_for_payload(ctx.app_config, request)
+        initial_metadata: dict[str, object] = {
+            "final_markdown_dir": final_markdown_dir,
+            "batch_session_id": session_id,
+            "batch_item_id": item_id,
+        }
+        job, _ = create_job(
+            source_path=resolved_input.path,
+            output_root=ctx.output_root,
+            config=job_config,
+            display_title=display_title,
+            initial_metadata=initial_metadata,
+        )
+        job.metadata["execution"] = "background"
+        persist_job(job, build_job_paths(ctx.output_root, job.job_id))
+
+        item["input_path"] = str(resolved_input.path)
+        item["display_title"] = display_title
+        item["output_dir"] = final_markdown_dir
+        item["output_dir_override"] = (
+            final_markdown_dir
+            if final_markdown_dir != session.get("common_output_dir")
+            else None
+        )
+        item["job_id"] = job.job_id
+        attempts = item.setdefault("attempt_job_ids", [])
+        if isinstance(attempts, list):
+            attempts.append(job.job_id)
+        write_batch_session(ctx.output_root, session)
+        ctx.executor.submit(
+            run_background_job,
+            input_path=str(resolved_input.path),
+            output_root=ctx.output_root,
+            config=job_config,
+            job_id=job.job_id,
+            display_title=display_title,
+            speaker_manifest_path=request.get("speaker_manifest_path"),
+            speaker_hint=request.get("speaker_hint"),
+            formats=request.get("formats"),
+            final_markdown_dir=final_markdown_dir,
+            initial_metadata=initial_metadata,
+        )
+    except InputResolutionError as error:
+        return json_response({"error": str(error)}, HTTPStatus.UNPROCESSABLE_ENTITY)
+    except (KeyError, StopIteration, ValueError) as error:
+        return json_response({"error": str(error)}, HTTPStatus.BAD_REQUEST)
+    return json_response(
+        {
+            "job": job_to_response(job),
+            "batch_session": batch_session_response(ctx.output_root, session),
+        },
+        HTTPStatus.ACCEPTED,
+    )
 
 
 def cleanup_temp_endpoint(ctx: Any) -> ApiResponse:
@@ -311,6 +478,7 @@ def run_background_job(
     speaker_hint: str | None,
     formats: str | None,
     final_markdown_dir: str | None = None,
+    initial_metadata: dict[str, object] | None = None,
 ) -> None:
     result = process_single_file(
         input_path,
@@ -318,7 +486,8 @@ def run_background_job(
         config=config,
         job_id=job_id,
         display_title=display_title,
-        initial_metadata={"final_markdown_dir": final_markdown_dir} if final_markdown_dir else None,
+        initial_metadata=initial_metadata
+        or ({"final_markdown_dir": final_markdown_dir} if final_markdown_dir else None),
         speaker_manifest_path=speaker_manifest_path,
         speaker_hint=speaker_hint,
         formats=formats,
@@ -331,3 +500,38 @@ def run_background_job(
             message=result.message,
             display_title=display_title,
         )
+        if initial_metadata:
+            payload = load_job(output_root, job_id)
+            if payload is not None:
+                metadata = payload.setdefault("metadata", {})
+                if isinstance(metadata, dict):
+                    metadata.update(initial_metadata)
+                write_job_payload(output_root / job_id / "job.json", payload)
+        return
+    if final_markdown_dir:
+        payload = load_job(output_root, job_id)
+        segments = read_json_file(output_root / job_id / "segments.json", [])
+        segment_payloads = segments if isinstance(segments, list) else []
+        if (
+            payload is not None
+            and build_speaker_review_payload(payload, segment_payloads)["status"] != "pending"
+        ):
+            status = save_final_markdown(payload, output_root, final_markdown_dir)
+            sync_saved_markdown_metadata(payload, status)
+            cleanup_report = cleanup_successful_job_media(
+                payload,
+                output_root=output_root,
+                job_id=job_id,
+                temp_root=Path(config.app.temp_dir),
+            )
+            payload["metadata"]["saved_markdown_cleanup"] = cleanup_report.to_payload()
+            write_job_payload(output_root / job_id / "job.json", payload)
+
+
+def _read_batch_item_request(ctx: Any) -> JsonObject:
+    """Allow native JSON submits to inherit the source path stored by the session."""
+    headers = getattr(ctx, "headers", None)
+    content_type = headers.get("Content-Type", "") if headers is not None else ""
+    if not content_type or content_type.startswith("multipart/form-data"):
+        return ctx.read_job_request()
+    return ctx.read_json_object()

@@ -11,9 +11,17 @@ from typing import Any, cast
 from urllib.parse import unquote, urlparse
 
 from transcribe_doc.app.config import AppConfig
+from transcribe_doc.service.batch_session_store import reconcile_batch_session_jobs
 from transcribe_doc.service.http_response import empty_response, send_api_response
-from transcribe_doc.service.job_store import list_artifacts, list_events, list_jobs, mark_interrupted_jobs
-from transcribe_doc.service.model_runtime import model_download_state_for_response as _model_download_state_for_response
+from transcribe_doc.service.job_store import (
+    list_artifacts,
+    list_events,
+    list_jobs,
+    mark_interrupted_jobs,
+)
+from transcribe_doc.service.model_runtime import (
+    model_download_state_for_response as _model_download_state_for_response,
+)
 from transcribe_doc.service.request_parsing import read_job_request, read_json_object
 from transcribe_doc.service.router import dispatch
 from transcribe_doc.service.types import JsonObject
@@ -21,12 +29,12 @@ from transcribe_doc.storage.temp_cleanup import cleanup_stale_temporary_media
 
 __all__ = [
     "LocalApiServer",
+    "_model_download_state_for_response",
     "build_server",
     "list_artifacts",
     "list_events",
     "list_jobs",
     "run_server",
-    "_model_download_state_for_response",
 ]
 
 
@@ -60,6 +68,7 @@ def run_server(config: AppConfig, host: str = "127.0.0.1", port: int = 8765) -> 
 def build_server(config: AppConfig, host: str = "127.0.0.1", port: int = 8765) -> LocalApiServer:
     """Build a configured HTTP server for CLI and tests."""
     mark_interrupted_jobs(Path(config.app.output_dir))
+    reconcile_batch_session_jobs(Path(config.app.output_dir))
     cleanup_report = cleanup_stale_temporary_media(
         output_root=Path(config.app.output_dir),
         temp_root=Path(config.app.temp_dir),

@@ -46,6 +46,7 @@ import {
   titleFromFilename
 } from "./appViewModel";
 import { AppSidebar, type AppView } from "./components/AppSidebar";
+import { BatchSessionPanel } from "./components/BatchSessionPanel";
 import { JobWorkspace } from "./components/JobWorkspace";
 import { ModelsModal } from "./components/ModelsModal";
 import { SettingsPanel } from "./components/SettingsPanel";
@@ -59,6 +60,8 @@ import { formatBytes } from "./format";
 import type {
   AppEnvironment,
   Artifact,
+  BatchSession,
+  BatchSessionItem,
   BackendLifecycle,
   FinalMarkdownStatus,
   HealthPayload,
@@ -73,6 +76,12 @@ interface MediaSelection {
   file?: File;
   name: string;
   path?: string;
+}
+
+export function batchFilesMatch(items: BatchSessionItem[], files: File[]): boolean {
+  const missingItems = items.filter((item) => !item.input_path && item.status === "configure");
+  return missingItems.length === files.length
+    && missingItems.every((item, index) => item.source_name === files[index]?.name);
 }
 
 export {
@@ -123,10 +132,13 @@ export function App() {
   const [health, setHealth] = useState<"unknown" | "ok" | "down">("unknown");
   const [healthDetails, setHealthDetails] = useState<HealthPayload | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [batchSessions, setBatchSessions] = useState<BatchSession[]>([]);
   const [currentView, setCurrentView] = useState<AppView>("new");
   const [previousView, setPreviousView] = useState<AppView>("new");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [selectedBatchSessionId, setSelectedBatchSessionId] = useState<string | null>(null);
+  const [selectedBatchItemId, setSelectedBatchItemId] = useState<string | null>(null);
   const [segments, setSegments] = useState<TranscriptSegment[]>([]);
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [events, setEvents] = useState<JobEvent[]>([]);
@@ -143,8 +155,7 @@ export function App() {
   const [speakerReview, setSpeakerReview] = useState<SpeakerReviewPayload | null>(null);
   const [isSavingFinalMarkdown, setIsSavingFinalMarkdown] = useState(false);
   const [isModelsOpen, setIsModelsOpen] = useState(false);
-  const [batchPaths, setBatchPaths] = useState("");
-  const [watchFolder, setWatchFolder] = useState("");
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -155,6 +166,8 @@ export function App() {
 
   const client = useMemo(() => new ApiClient(normalizeBaseUrl(apiBase)), [apiBase]);
   const selectedJob = jobs.find((job) => job.job_id === selectedJobId) ?? null;
+  const selectedBatchSession = batchSessions.find((session) => session.session_id === selectedBatchSessionId) ?? null;
+  const selectedBatchItem = selectedBatchSession?.items.find((item) => item.item_id === selectedBatchItemId) ?? null;
   const selectedJobDisplayStatus = selectedJob ? displayStatus(selectedJob) : null;
   const selectedDisplayWarnings = selectedJob ? displayWarnings(selectedJob) : [];
   const hasActiveJobs = jobs.some((job) => job.status === "queued" || job.status === "processing");
@@ -187,8 +200,15 @@ export function App() {
   const selectedDiarizationDiagnostic = diarizationDiagnostic(selectedJob);
   const visibleHistoryJobs = useMemo(() => {
     const query = searchQuery.trim().toLocaleLowerCase("ru");
-    return jobs.filter((job) => !query || jobDisplayTitle(job).toLocaleLowerCase("ru").includes(query));
-  }, [jobs, searchQuery]);
+    const batchJobIds = new Set(
+      batchSessions.flatMap((session) => session.items.flatMap((item) => item.attempt_job_ids))
+    );
+    return jobs.filter((job) => !batchJobIds.has(job.job_id) && (!query || jobDisplayTitle(job).toLocaleLowerCase("ru").includes(query)));
+  }, [batchSessions, jobs, searchQuery]);
+  const visibleHistoryBatches = useMemo(() => {
+    const query = searchQuery.trim().toLocaleLowerCase("ru");
+    return batchSessions.filter((session) => !query || session.items.some((item) => item.display_title.toLocaleLowerCase("ru").includes(query)));
+  }, [batchSessions, searchQuery]);
 
   const refresh = useCallback(async () => {
     try {
@@ -198,10 +218,14 @@ export function App() {
       setBackendHealthFailures(0);
       const onlineLifecycle = await markBackendOnline(isManagedApp);
       if (onlineLifecycle) setBackendLifecycle(onlineLifecycle);
-      const nextJobs = await client.listJobs();
-      const nextModels = await client.listModels();
+      const [nextJobs, nextModels, nextBatchSessions] = await Promise.all([
+        client.listJobs(),
+        client.listModels(),
+        client.listBatchSessions()
+      ]);
       setJobs(nextJobs);
       setModels(nextModels);
+      setBatchSessions(nextBatchSessions);
       setSelectedModelName((current) =>
         nextModels.models.some((model) => model.name === current) ? current : nextModels.current_model
       );
@@ -391,12 +415,14 @@ export function App() {
     speakerReview?.status
   ]);
 
-  function applyMediaSelections(selections: MediaSelection[]) {
+  async function applyMediaSelections(selections: MediaSelection[]) {
     setUploadError(null);
-    setCurrentView("new");
     setSelectedJobId(null);
     setJobOutputDirectory(autosaveMarkdownDir);
     if (selections.length === 1) {
+      setCurrentView("new");
+      setSelectedBatchSessionId(null);
+      setSelectedBatchItemId(null);
       setMediaSelection(selections[0]);
       setBatchSelections([]);
       setTranscriptionTitle(titleFromFilename(selections[0].name));
@@ -404,7 +430,12 @@ export function App() {
     }
     setMediaSelection(null);
     setBatchSelections(selections);
-    setTranscriptionTitle("");
+    const session = await client.createBatchSession(
+      selections.map((selection) => ({ inputPath: selection.path, sourceName: selection.name })),
+      autosaveMarkdownDir
+    );
+    setBatchSessions((current) => [session, ...current.filter((item) => item.session_id !== session.session_id)]);
+    openBatchSession(session);
   }
 
   function selectBrowserFiles(files: File[]) {
@@ -413,7 +444,9 @@ export function App() {
       setUploadError(UPLOAD_UNSUPPORTED_MEDIA_MESSAGE);
       return;
     }
-    applyMediaSelections(files.map((file) => ({ file, name: file.name })));
+    void applyMediaSelections(files.map((file) => ({ file, name: file.name }))).catch((error) => {
+      setUploadError(error instanceof Error ? error.message : "Не удалось создать пакет");
+    });
   }
 
   async function selectNativePaths(paths: string[]) {
@@ -428,7 +461,7 @@ export function App() {
       setUploadError(UPLOAD_UNSUPPORTED_MEDIA_MESSAGE);
       return;
     }
-    applyMediaSelections(selections);
+    await applyMediaSelections(selections);
   }
 
   async function chooseTranscriptionFiles() {
@@ -446,6 +479,58 @@ export function App() {
     setTranscriptionTitle("");
     setUploadError(null);
     setJobOutputDirectory(autosaveMarkdownDir);
+  }
+
+  function prepareBatchItem(item: BatchSessionItem | null, session: BatchSession) {
+    setSelectedBatchItemId(item?.item_id ?? null);
+    setTranscriptionTitle(item?.display_title ?? "");
+    setJobOutputDirectory(item?.output_dir ?? session.common_output_dir ?? null);
+  }
+
+  function openBatchSession(session: BatchSession) {
+    const nextItem = session.items.find((item) => item.status === "configure")
+      ?? session.items.find((item) => item.status === "failed")
+      ?? null;
+    setSelectedBatchSessionId(session.session_id);
+    setSelectedJobId(null);
+    setCurrentView("batch");
+    prepareBatchItem(nextItem, session);
+  }
+
+  function selectBatchItem(item: BatchSessionItem) {
+    if (!selectedBatchSession || !["configure", "failed"].includes(item.status)) return;
+    const firstConfigureItem = selectedBatchSession.items.find((entry) => entry.status === "configure");
+    if (item.status === "configure" && firstConfigureItem?.item_id !== item.item_id) return;
+    prepareBatchItem(item, selectedBatchSession);
+  }
+
+  function reattachBatchFiles(files: File[]) {
+    if (!selectedBatchSession || files.some((file) => !isSupportedMediaFile(file))) {
+      setNotice(UPLOAD_UNSUPPORTED_MEDIA_MESSAGE);
+      return;
+    }
+    const missingItems = selectedBatchSession.items.filter(
+      (item) => !item.input_path && item.status === "configure"
+    );
+    if (!batchFilesMatch(selectedBatchSession.items, files)) {
+      setNotice("Выберите оставшиеся файлы пакета в исходном порядке.");
+      return;
+    }
+    setBatchSelections((current) => {
+      const next = [...current];
+      missingItems.forEach((item, index) => {
+        next[item.position - 1] = { file: files[index], name: files[index].name };
+      });
+      return next;
+    });
+    setNotice("Файлы пакета подключены повторно.");
+  }
+
+  function storeBatchSession(session: BatchSession) {
+    setBatchSessions((current) => [
+      session,
+      ...current.filter((item) => item.session_id !== session.session_id)
+    ]);
   }
 
   function handleWorkspaceDrag(event: DragEvent<HTMLElement>) {
@@ -505,43 +590,44 @@ export function App() {
     }
   }
 
-  async function submitBatch() {
-    const inputPaths = batchPaths
-      .split("\n")
-      .map((item) => item.trim())
-      .filter(Boolean);
-    if (!inputPaths.length) return;
+  async function submitBatchItem(event: FormEvent) {
+    event.preventDefault();
+    if (!selectedBatchSession || !selectedBatchItem || !jobOutputDirectory) return;
+    const titleError = titleValidationMessage(transcriptionTitle);
+    if (titleError) {
+      setNotice(titleError);
+      return;
+    }
     if (!selectedModelIsReady) {
       setNotice("Выберите готовую модель распознавания или скачайте текущую модель.");
       setIsModelsOpen(true);
       return;
     }
+    const browserFile = batchSelections[selectedBatchItem.position - 1]?.file;
+    const media = browserFile ?? selectedBatchItem.input_path;
+    if (!media) {
+      setNotice("Файл недоступен после перезапуска browser-режима. Подключите файлы повторно.");
+      return;
+    }
     setIsSubmitting(true);
     try {
-      const result = await client.createBatch(
-        inputPaths,
+      const result = await client.submitBatchSessionItem(
+        selectedBatchSession.session_id,
+        selectedBatchItem.item_id,
+        media,
+        transcriptionTitle,
+        jobOutputDirectory,
         speakerHint,
         selectedModel?.backend,
         selectedModel?.name ?? selectedModelName
       );
+      storeBatchSession(result.batch_session);
+      const nextItem = result.batch_session.items.find((item) => item.status === "configure") ?? null;
+      prepareBatchItem(nextItem, result.batch_session);
       await refresh();
-      setNotice(`Пакет завершён: успешно ${result.succeeded} из ${result.total}`);
+      setNotice(nextItem ? "Файл запущен. Настройте следующий." : "Все файлы настроены. Обработка продолжается в фоне.");
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Пакетная обработка не удалась");
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
-
-  async function submitWatchScan() {
-    if (!watchFolder.trim()) return;
-    setIsSubmitting(true);
-    try {
-      const result = await client.scanWatchFolder(watchFolder.trim());
-      await refresh();
-      setNotice(`Папка проверена: успешно ${result.succeeded} из ${result.total}`);
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Проверка папки не удалась");
+      setNotice(error instanceof Error ? error.message : "Не удалось запустить файл");
     } finally {
       setIsSubmitting(false);
     }
@@ -643,6 +729,27 @@ export function App() {
     }
   }
 
+  async function chooseBatchCommonOutputDirectory() {
+    if (!selectedBatchSession) return;
+    try {
+      let selected = await chooseAutosaveMarkdownDir(isManagedApp);
+      if (!selected && !isManagedApp) {
+        selected = window.prompt(
+          "Общая папка пакета",
+          selectedBatchSession.common_output_dir ?? autosaveMarkdownDir ?? ""
+        );
+      }
+      if (!selected) return;
+      const session = await client.updateBatchSessionOutput(selectedBatchSession.session_id, selected);
+      storeBatchSession(session);
+      if (!selectedBatchItem?.output_dir_override && !selectedBatchItem?.job_id) {
+        setJobOutputDirectory(selected);
+      }
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Не удалось выбрать общую папку");
+    }
+  }
+
   async function chooseSelectedJobOutputDirectory() {
     try {
       let selected = await chooseAutosaveMarkdownDir(isManagedApp);
@@ -728,6 +835,8 @@ export function App() {
   function openNewTranscription() {
     setCurrentView("new");
     setSelectedJobId(null);
+    setSelectedBatchSessionId(null);
+    setSelectedBatchItemId(null);
     setMediaSelection(null);
     setBatchSelections([]);
     setJobOutputDirectory(autosaveMarkdownDir);
@@ -743,6 +852,11 @@ export function App() {
   function selectJob(jobId: string) {
     setSelectedJobId(jobId);
     setCurrentView("job");
+  }
+
+  function selectBatchSession(sessionId: string) {
+    const session = batchSessions.find((item) => item.session_id === sessionId);
+    if (session) openBatchSession(session);
   }
 
   async function handleUpdateAction() {
@@ -807,14 +921,17 @@ export function App() {
   return (
     <main className="app-shell">
       <AppSidebar
+        batchSessions={batchSessions}
         currentView={currentView}
         jobs={jobs}
         searchQuery={searchQuery}
         selectedJobId={selectedJobId}
+        selectedBatchSessionId={selectedBatchSessionId}
         onNewTranscription={openNewTranscription}
         onOpenHistory={() => setCurrentView("history")}
         onOpenSettings={openSettings}
         onSearchQueryChange={setSearchQuery}
+        onSelectBatchSession={selectBatchSession}
         onSelectJob={selectJob}
       />
 
@@ -848,6 +965,7 @@ export function App() {
             selectedModelIsReady={selectedModelIsReady}
             selectedModelStatusText={selectedModelStatusText}
             selectedModelTitle={selectedModelTitle}
+            title={transcriptionTitle}
             uploadError={uploadError}
             onChooseFiles={() => void chooseTranscriptionFiles()}
             onChooseOutputDirectory={() => void chooseJobOutputDirectory()}
@@ -855,6 +973,24 @@ export function App() {
             onFilesSelected={selectBrowserFiles}
             onOpenSettings={openSettings}
             onSubmitJob={(event) => void submitJob(event)}
+            onTitleChange={setTranscriptionTitle}
+          />
+        ) : currentView === "batch" && selectedBatchSession ? (
+          <BatchSessionPanel
+            canSubmit={Boolean(selectedBatchItem && (selectedBatchItem.input_path || batchSelections[selectedBatchItem.position - 1]?.file) && !titleValidationMessage(transcriptionTitle) && selectedModelIsReady && !isSubmitting)}
+            currentItem={selectedBatchItem}
+            isSubmitting={isSubmitting}
+            needsFileReattach={Boolean(selectedBatchItem && !selectedBatchItem.input_path && !batchSelections[selectedBatchItem.position - 1]?.file)}
+            outputDirectory={jobOutputDirectory}
+            session={selectedBatchSession}
+            title={transcriptionTitle}
+            onChooseCommonOutput={() => void chooseBatchCommonOutputDirectory()}
+            onChooseItemOutput={() => void chooseJobOutputDirectory()}
+            onFilesReattached={reattachBatchFiles}
+            onOpenJob={selectJob}
+            onSelectItem={selectBatchItem}
+            onSubmit={(event) => void submitBatchItem(event)}
+            onTitleChange={setTranscriptionTitle}
           />
         ) : currentView === "history" ? (
           <section className="history-screen">
@@ -863,13 +999,31 @@ export function App() {
             </header>
             <label className="history-search"><span>Поиск по записям</span><input autoFocus value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} /></label>
             <div className="history-table">
+              {visibleHistoryBatches.map((session) => (
+                <details className="history-batch" key={session.session_id}>
+                  <summary>
+                    <span><strong>Пакет · {session.totals.total} файлов</strong><small>Готово {session.totals.ready} · Обрабатывается {session.totals.processing} · Ошибок {session.totals.failed}</small></span>
+                  </summary>
+                  <div>
+                    <button type="button" onClick={() => selectBatchSession(session.session_id)}>
+                      <span><strong>Открыть пакет</strong><small>Очередь и настройка файлов</small></span>
+                    </button>
+                    {session.items.map((item) => (
+                      <button disabled={!item.job_id} key={item.item_id} type="button" onClick={() => item.job_id && selectJob(item.job_id)}>
+                        <span><strong>{item.display_title}</strong><small>{item.output_dir ?? "Папка не выбрана"}</small></span>
+                        <span className={`status-label ${item.status}`}>{item.status === "configure" ? "Настроить" : item.status === "processing" ? "Обрабатывается" : item.status === "ready" ? "Готово" : "Ошибка"}</span>
+                      </button>
+                    ))}
+                  </div>
+                </details>
+              ))}
               {visibleHistoryJobs.map((job) => (
                 <button type="button" key={job.job_id} onClick={() => selectJob(job.job_id)}>
                   <span><strong>{jobDisplayTitle(job)}</strong><small>{String(job.metadata.saved_markdown_dir ?? job.source_paths[0] ?? "Локальная задача")}</small></span>
                   <span className={`status-label ${displayStatus(job)}`}>{statusLabel(displayStatus(job))}</span>
                 </button>
               ))}
-              {!visibleHistoryJobs.length && <p className="empty-copy">Ничего не найдено</p>}
+              {!visibleHistoryJobs.length && !visibleHistoryBatches.length && <p className="empty-copy">Ничего не найдено</p>}
             </div>
           </section>
         ) : currentView === "settings" ? (
@@ -877,7 +1031,6 @@ export function App() {
             apiBase={apiBase}
             autosaveMarkdownDir={autosaveMarkdownDir}
             backendLifecycle={backendLifecycle}
-            batchPaths={batchPaths}
             cacheDir={cacheDir}
             ffmpegAvailable={ffmpegAvailable}
             ffprobeAvailable={ffprobeAvailable}
@@ -887,19 +1040,14 @@ export function App() {
             outputDir={outputDir}
             selectedModelTitle={selectedModelTitle}
             updateState={updateState}
-            watchFolder={watchFolder}
             onApiBaseChange={setApiBase}
-            onBatchPathsChange={setBatchPaths}
             onChooseFolder={() => void chooseFinalMarkdownFolder()}
             onCleanupTemp={() => void cleanupTemporaryFiles()}
             onDone={() => setCurrentView(previousView === "settings" ? "new" : previousView)}
             onModelsOpen={() => setIsModelsOpen(true)}
             onRefresh={() => void refresh()}
             onRetryBackendStart={() => void retryBackendStart()}
-            onSubmitBatch={() => void submitBatch()}
-            onSubmitWatchScan={() => void submitWatchScan()}
             onUpdateAction={() => void handleUpdateAction()}
-            onWatchFolderChange={setWatchFolder}
           />
         ) : selectedJob && selectedJobDisplayStatus ? (
           <JobWorkspace
