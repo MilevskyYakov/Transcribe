@@ -1,0 +1,43 @@
+{
+  "origin": "Synthetic macOS say voices already committed under sample_data; labels transcribed from generated speaker turns. No user recordings.",
+  "contract": {
+    "overlap_label": "OVERLAP",
+    "min_speaker_turn_accuracy": 0.8,
+    "max_false_label_rate": 0.1,
+    "min_centroid_margin": 0.1,
+    "max_dominant_cluster_share": 0.8,
+    "min_segments_for_imbalance": 4
+  },
+  "fixtures": [
+    {
+      "name": "clean",
+      "expected_labels": ["A", "B"],
+      "predictions": {"current": ["S0", "S1"], "without_smoothing": ["S0", "S1"]},
+      "quality": {"segment_count": 2, "detected_cluster_count_max": 2, "min_centroid_similarity_margin": 0.25, "dominant_cluster_share": 0.5}
+    },
+    {
+      "name": "rich_alternation",
+      "expected_labels": ["A", "B", "A", "B", "A", "B"],
+      "predictions": {"current": ["S0", "S1", "S0", "S1", "S0", "S1"], "without_smoothing": ["S0", "S1", "S0", "S1", "S0", "S1"]},
+      "quality": {"segment_count": 6, "detected_cluster_count_max": 2, "min_centroid_similarity_margin": 0.21, "dominant_cluster_share": 0.5}
+    },
+    {
+      "name": "legitimate_imbalance",
+      "expected_labels": ["A", "A", "B", "A", "A", "A"],
+      "predictions": {"current": ["S0", "S0", "S1", "S0", "S0", "S0"], "without_smoothing": ["S0", "S0", "S1", "S0", "S0", "S0"]},
+      "quality": {"segment_count": 6, "detected_cluster_count_max": 2, "min_centroid_similarity_margin": 0.14, "dominant_cluster_share": 0.83}
+    },
+    {
+      "name": "overlap",
+      "expected_labels": ["A", "B", "B", "A", "OVERLAP", "B"],
+      "predictions": {"current": ["S0", "S1", "S0", "S0", "S0", "S0"], "without_smoothing": ["S0", "S1", "S0", "S0", "S0", "S0"]},
+      "quality": {"segment_count": 6, "detected_cluster_count_max": 2, "min_centroid_similarity_margin": 0.26, "dominant_cluster_share": 0.83}
+    },
+    {
+      "name": "rapid_aba_interruption",
+      "expected_labels": ["A", "B", "A"],
+      "predictions": {"current": ["S0", "S0", "S0"], "without_smoothing": ["S0", "S1", "S0"]},
+      "quality": {"segment_count": 3, "detected_cluster_count_max": 2, "min_centroid_similarity_margin": 0.04, "dominant_cluster_share": 0.67}
+    }
+  ]
+}
