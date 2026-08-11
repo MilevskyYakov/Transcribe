@@ -1,38 +1,51 @@
 import { Circle, History, Plus, Search, Settings } from "lucide-react";
 import { displayStatus, jobDisplayTitle, statusLabel } from "../appViewModel";
-import type { Job } from "../types";
+import type { BatchSession, Job } from "../types";
 
 const mnemaLockup = new URL("../assets/mnema-lockup.svg", import.meta.url).href;
 
-export type AppView = "new" | "history" | "settings" | "job";
+export type AppView = "new" | "history" | "settings" | "job" | "batch";
 
 interface AppSidebarProps {
   currentView: AppView;
+  batchSessions: BatchSession[];
   jobs: Job[];
   searchQuery: string;
   selectedJobId: string | null;
+  selectedBatchSessionId: string | null;
   onNewTranscription: () => void;
   onOpenHistory: () => void;
   onOpenSettings: () => void;
   onSearchQueryChange: (value: string) => void;
+  onSelectBatchSession: (sessionId: string) => void;
   onSelectJob: (jobId: string) => void;
 }
 
 export function AppSidebar({
   currentView,
+  batchSessions,
   jobs,
   searchQuery,
   selectedJobId,
+  selectedBatchSessionId,
   onNewTranscription,
   onOpenHistory,
   onOpenSettings,
   onSearchQueryChange,
+  onSelectBatchSession,
   onSelectJob
 }: AppSidebarProps) {
   const normalizedQuery = searchQuery.trim().toLocaleLowerCase("ru");
+  const batchJobIds = new Set(
+    batchSessions.flatMap((session) => session.items.flatMap((item) => item.attempt_job_ids))
+  );
+  const visibleSessions = batchSessions.filter((session) =>
+    !normalizedQuery || session.items.some((item) => item.display_title.toLocaleLowerCase("ru").includes(normalizedQuery))
+  );
   const visibleJobs = jobs
+    .filter((job) => !batchJobIds.has(job.job_id))
     .filter((job) => !normalizedQuery || jobDisplayTitle(job).toLocaleLowerCase("ru").includes(normalizedQuery))
-    .slice(0, 12);
+    .slice(0, Math.max(0, 12 - visibleSessions.length));
 
   return (
     <aside className="app-sidebar">
@@ -63,6 +76,20 @@ export function AppSidebar({
           <span>История</span>
         </button>
         <div className="history-list">
+          {visibleSessions.slice(0, 12).map((session) => (
+            <button
+              className={session.session_id === selectedBatchSessionId && currentView === "batch" ? "history-item active" : "history-item"}
+              key={session.session_id}
+              type="button"
+              onClick={() => onSelectBatchSession(session.session_id)}
+            >
+              <Circle className={`history-status ${session.status === "active" ? "processing" : session.totals.failed ? "failed" : "completed"}`} fill="currentColor" size={8} />
+              <span>
+                <strong>Пакет · {session.totals.total} файлов</strong>
+                <small>{session.status === "active" ? `Готово ${session.totals.ready} из ${session.totals.total}` : session.totals.failed ? `Готово ${session.totals.ready}, ошибок ${session.totals.failed}` : "Готово"}</small>
+              </span>
+            </button>
+          ))}
           {visibleJobs.map((job) => {
             const status = displayStatus(job);
             return (
@@ -80,7 +107,7 @@ export function AppSidebar({
               </button>
             );
           })}
-          {visibleJobs.length === 0 && <p className="sidebar-empty">Записей пока нет</p>}
+          {visibleJobs.length === 0 && visibleSessions.length === 0 && <p className="sidebar-empty">Записей пока нет</p>}
         </div>
       </section>
 

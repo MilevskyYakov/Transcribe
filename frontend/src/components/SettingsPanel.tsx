@@ -13,7 +13,6 @@ interface SettingsPanelProps {
   apiBase: string;
   autosaveMarkdownDir: string | null;
   backendLifecycle: BackendLifecycle | null;
-  batchPaths: string;
   cacheDir: string | null;
   ffmpegAvailable: boolean;
   ffprobeAvailable: boolean;
@@ -23,26 +22,20 @@ interface SettingsPanelProps {
   outputDir: string | null;
   selectedModelTitle: string;
   updateState: UpdateState;
-  watchFolder: string;
   onApiBaseChange: (value: string) => void;
-  onBatchPathsChange: (value: string) => void;
   onChooseFolder: () => void;
   onCleanupTemp: () => void;
   onDone: () => void;
   onModelsOpen: () => void;
   onRefresh: () => void;
   onRetryBackendStart: () => void;
-  onSubmitBatch: () => void;
-  onSubmitWatchScan: () => void;
   onUpdateAction: () => void;
-  onWatchFolderChange: (value: string) => void;
 }
 
 export function SettingsPanel({
   apiBase,
   autosaveMarkdownDir,
   backendLifecycle,
-  batchPaths,
   cacheDir,
   ffmpegAvailable,
   ffprobeAvailable,
@@ -52,19 +45,14 @@ export function SettingsPanel({
   outputDir,
   selectedModelTitle,
   updateState,
-  watchFolder,
   onApiBaseChange,
-  onBatchPathsChange,
   onChooseFolder,
   onCleanupTemp,
   onDone,
   onModelsOpen,
   onRefresh,
   onRetryBackendStart,
-  onSubmitBatch,
-  onSubmitWatchScan,
-  onUpdateAction,
-  onWatchFolderChange
+  onUpdateAction
 }: SettingsPanelProps) {
   const lifecycleTone = backendLifecycleTone(backendLifecycle);
   const technicalDetails = [
@@ -133,16 +121,6 @@ export function SettingsPanel({
           </details>
         </section>
 
-        <section className="settings-section">
-          <h2>Автоматизация</h2>
-          <p className="section-help">Вспомогательные сценарии для разработки и автоматизации.</p>
-          <div className="automation-grid">
-            <textarea aria-label="Пути файлов для пакетной обработки" placeholder="Пути файлов, по одному на строку" value={batchPaths} onChange={(event) => onBatchPathsChange(event.target.value)} />
-            <button className="secondary-button" disabled={!batchPaths.trim() || isSubmitting} type="button" onClick={onSubmitBatch}>Запустить пакет по путям</button>
-            <input aria-label="Путь watch folder" placeholder="Путь watch folder" value={watchFolder} onChange={(event) => onWatchFolderChange(event.target.value)} />
-            <button className="secondary-button" disabled={!watchFolder.trim() || isSubmitting} type="button" onClick={onSubmitWatchScan}>Проверить папку</button>
-          </div>
-        </section>
       </div>
     </section>
   );

@@ -16,11 +16,52 @@ const completedJob = {
 };
 
 async function mockApp(page: Page, jobs: object[]) {
+  let batchSessions: any[] = [];
   await page.route("http://127.0.0.1:8765/health", (route) => route.fulfill({ json: { status: "ok" } }));
   await page.route("http://127.0.0.1:8765/jobs", (route) => route.fulfill({ json: { jobs } }));
   await page.route("http://127.0.0.1:8765/models", (route) => route.fulfill({
     json: { current_model: "large-v3", models: [{ name: "large-v3", label: "large-v3", status: "ready" }] }
   }));
+  await page.route("http://127.0.0.1:8765/batch-sessions", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({ json: { batch_sessions: batchSessions } });
+      return;
+    }
+    const request = route.request().postDataJSON();
+    const items = request.items.map((item: any, index: number) => ({
+      item_id: `item-${index + 1}`,
+      position: index + 1,
+      input_path: item.input_path ?? null,
+      source_name: item.source_name,
+      display_title: item.source_name.replace(/\.[^.]+$/, ""),
+      output_dir: "/Users/demo/Documents",
+      output_dir_override: null,
+      job_id: null,
+      attempt_job_ids: [],
+      status: "configure",
+      job_status: null
+    }));
+    const session = {
+      session_id: "batch-1",
+      created_at: "2026-08-11T00:00:00Z",
+      common_output_dir: "/Users/demo/Documents",
+      status: "active",
+      totals: { total: items.length, configure: items.length, processing: 0, ready: 0, failed: 0 },
+      items
+    };
+    batchSessions = [session];
+    await route.fulfill({ status: 201, json: { batch_session: session } });
+  });
+  await page.route(/http:\/\/127\.0\.0\.1:8765\/batch-sessions\/[^/]+\/items\/[^/]+\/submit/, async (route) => {
+    const session = batchSessions[0];
+    const itemId = route.request().url().split("/").at(-2);
+    session.items = session.items.map((item: any) => item.item_id === itemId
+      ? { ...item, job_id: "job-batch-1", attempt_job_ids: ["job-batch-1"], status: "processing", job_status: "queued" }
+      : item);
+    session.totals = { ...session.totals, configure: session.totals.configure - 1, processing: session.totals.processing + 1 };
+    jobs.push({ ...completedJob, job_id: "job-batch-1", status: "queued", metadata: { display_title: "one" }, artifacts: {} });
+    await route.fulfill({ status: 202, json: { batch_session: session, job: jobs.at(-1) } });
+  });
   await page.route(/http:\/\/127\.0\.0\.1:8765\/jobs\/[^/]+\/transcript/, (route) => route.fulfill({
     json: { job: completedJob, segments: [{ segment_id: "1", start_seconds: 0, end_seconds: 8, text_raw: "Обсудили план запуска.", text_clean: "Обсудили план запуска.", speaker_label: "Яков" }], words: [] }
   }));
@@ -56,7 +97,7 @@ test("launch, selected file, history, result and settings keep one workspace sta
   await page.getByRole("button", { name: "Настройки", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Настройки" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Диагностика" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Автоматизация" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Автоматизация" })).toHaveCount(0);
 });
 
 test("workspace drop accepts media, preserves selection on errors, and hands multiple files to batch", async ({ page }) => {
@@ -85,8 +126,13 @@ test("workspace drop accepts media, preserves selection on errors, and hands mul
     { name: "one.wav", type: "audio/wav" },
     { name: "two.mp3", type: "audio/mpeg" }
   ]);
-  await expect(page.getByText("Пакет · 2 файла", { exact: true })).toBeVisible();
-  await expect(page.getByText("Файлы переданы в пакетную сессию")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Пакет · 1 из 2" })).toBeVisible();
+  await expect(page.getByText("one", { exact: true })).toBeVisible();
+  await expect(page.locator(".batch-item").filter({ hasText: "two" })).toBeDisabled();
+  await page.getByRole("button", { name: "Начать транскрибацию" }).click();
+  await expect(page.getByRole("heading", { name: "Пакет · 2 из 2" })).toBeVisible();
+  await expect(page.getByText("two", { exact: true })).toBeVisible();
+  await expect(page.getByText("Обрабатывается", { exact: true })).toBeVisible();
 });
 
 test("processing and error jobs open dedicated states while remaining in history", async ({ page }) => {

@@ -64,6 +64,37 @@ export interface Job {
   warnings: string[];
 }
 
+export type BatchItemStatus = "configure" | "processing" | "ready" | "failed";
+
+export interface BatchSessionItem {
+  item_id: string;
+  position: number;
+  input_path?: string | null;
+  source_name: string;
+  display_title: string;
+  output_dir?: string | null;
+  output_dir_override?: string | null;
+  job_id?: string | null;
+  attempt_job_ids: string[];
+  status: BatchItemStatus;
+  job_status?: JobStatus | null;
+}
+
+export interface BatchSession {
+  session_id: string;
+  created_at: string;
+  common_output_dir?: string | null;
+  status: "active" | "completed" | "completed_with_errors";
+  totals: {
+    total: number;
+    configure: number;
+    processing: number;
+    ready: number;
+    failed: number;
+  };
+  items: BatchSessionItem[];
+}
+
 export interface WordToken {
   segment_id?: string;
   speaker_label?: string | null;
