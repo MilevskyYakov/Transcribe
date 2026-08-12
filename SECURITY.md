@@ -1,6 +1,6 @@
 # Security Policy
 
-Transcribe Doc is a local-first desktop app. Please do not upload private audio, transcripts, API keys, personal documents, or other sensitive data to public GitHub Issues, Pull Requests, or Discussions.
+Mnema is a local-first desktop app. Please do not upload private audio, transcripts, API keys, personal documents, or other sensitive data to public GitHub Issues, Pull Requests, or Discussions.
 
 ## Reporting a vulnerability
 

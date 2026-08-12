@@ -126,7 +126,7 @@ export {
 
 export function App() {
   const [apiBase, setApiBase] = useState(
-    () => localStorage.getItem("transcribe-doc-api-base") ?? DEFAULT_API_BASE
+    () => localStorage.getItem("mnema-api-base") ?? localStorage.getItem("transcribe-doc-api-base") ?? DEFAULT_API_BASE
   );
   const [appEnvironment, setAppEnvironment] = useState<AppEnvironment | null>(null);
   const [backendLifecycle, setBackendLifecycle] = useState<BackendLifecycle | null>(null);
@@ -317,7 +317,7 @@ export function App() {
 
   useEffect(() => {
     if (!isManagedApp) {
-      localStorage.setItem("transcribe-doc-api-base", normalizeBaseUrl(apiBase));
+      localStorage.setItem("mnema-api-base", normalizeBaseUrl(apiBase));
     }
   }, [apiBase, isManagedApp]);
 

@@ -3,8 +3,8 @@ from importlib import import_module
 
 import numpy as np
 
-from transcribe_doc.app.models import SpeakerMapping, TranscriptSegment
-from transcribe_doc.diarization.resemblyzer_backend import (
+from mnema.app.models import SpeakerMapping, TranscriptSegment
+from mnema.diarization.resemblyzer_backend import (
     ResemblyzerDiarizationBackend,
     is_resemblyzer_available,
 )
@@ -279,7 +279,7 @@ def test_is_resemblyzer_available_returns_false_when_import_fails(monkeypatch) -
         return original_import_module(module_name)
 
     monkeypatch.setattr(
-        "transcribe_doc.diarization.resemblyzer_backend.import_module",
+        "mnema.diarization.resemblyzer_backend.import_module",
         fake_import_module,
     )
 

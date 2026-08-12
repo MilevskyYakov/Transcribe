@@ -18,7 +18,7 @@ if [ ! -x "$PYTHON_DIR/bin/python" ]; then
 fi
 
 "$PYTHON_DIR/bin/python" -m pip install --upgrade pip wheel
-"$PYTHON_DIR/bin/python" -m pip uninstall -y transcribe-doc >/dev/null 2>&1 || true
+"$PYTHON_DIR/bin/python" -m pip uninstall -y mnema >/dev/null 2>&1 || true
 "$PYTHON_DIR/bin/python" -m pip install "$ROOT_DIR"
 
 for tool in ffmpeg ffprobe; do

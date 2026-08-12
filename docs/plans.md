@@ -59,7 +59,7 @@
 python -m pytest tests/test_config.py tests/test_models.py
 python -m ruff check src tests
 python -m mypy src
-python -m transcribe_doc.cli.main --help
+python -m mnema.cli.main --help
 ```
 
 ### Known Risks
@@ -77,7 +77,7 @@ python -m transcribe_doc.cli.main --help
 - [ ] Реализовать `input_resolver`, `manifest_loader`, `job_manager`, `artifact_store`, `paths`.
 - [ ] Реализовать media probe, извлечение аудио и нормализацию через `ffmpeg`.
 - [ ] Добавить сохранение `job.json`, `config snapshot`, extracted/normalized audio и per-job logs.
-- [ ] Поддержать single-file режим CLI `transcribe-doc run`.
+- [ ] Поддержать single-file режим CLI `mnema run`.
 - [ ] Добавить валидацию входных форматов и понятные ошибки для неподдерживаемых файлов.
 
 ### Definition of Done
@@ -88,7 +88,7 @@ python -m transcribe_doc.cli.main --help
 ### Validation
 ```sh
 python -m pytest tests/test_ingest.py tests/test_media.py
-python -m transcribe_doc.cli.main run sample_data/sample.mp4 --out ./output --formats json --save-artifacts
+python -m mnema.cli.main run sample_data/sample.mp4 --out ./output --formats json --save-artifacts
 ```
 
 ### Known Risks
@@ -118,7 +118,7 @@ python -m transcribe_doc.cli.main run sample_data/sample.mp4 --out ./output --fo
 ### Validation
 ```sh
 python -m pytest tests/test_pipeline_smoke.py tests/test_cleanup.py tests/test_speaker_merge.py
-python -m transcribe_doc.cli.main run sample_data/dialogue.mp3 --out ./output --speaker-manifest sample_data/speakers.json --save-artifacts
+python -m mnema.cli.main run sample_data/dialogue.mp3 --out ./output --speaker-manifest sample_data/speakers.json --save-artifacts
 ```
 
 ### Known Risks
@@ -147,7 +147,7 @@ python -m transcribe_doc.cli.main run sample_data/dialogue.mp3 --out ./output --
 ### Validation
 ```sh
 python -m pytest tests/test_exports.py tests/test_summary.py tests/test_schema.py
-python -m transcribe_doc.cli.main run sample_data/dialogue.mp3 --out ./output --formats txt,md,docx,pdf,srt,json
+python -m mnema.cli.main run sample_data/dialogue.mp3 --out ./output --formats txt,md,docx,pdf,srt,json
 ```
 
 ### Known Risks
@@ -176,8 +176,8 @@ python -m transcribe_doc.cli.main run sample_data/dialogue.mp3 --out ./output --
 ### Validation
 ```sh
 python -m pytest tests/test_batch.py tests/test_watch_folder.py
-python -m transcribe_doc.cli.main batch sample_data/a.mp3 sample_data/b.mp4 --out ./output
-python -m transcribe_doc.cli.main dir sample_data/incoming --out ./output --recursive
+python -m mnema.cli.main batch sample_data/a.mp3 sample_data/b.mp4 --out ./output
+python -m mnema.cli.main dir sample_data/incoming --out ./output --recursive
 ```
 
 ### Known Risks
@@ -207,7 +207,7 @@ python -m transcribe_doc.cli.main dir sample_data/incoming --out ./output --recu
 ### Validation
 ```sh
 python -m pytest tests/test_service_api.py
-python -m transcribe_doc.cli.main serve --host 127.0.0.1 --port 8765
+python -m mnema.cli.main serve --host 127.0.0.1 --port 8765
 python -m pytest tests/test_service_smoke.py
 ```
 
@@ -224,7 +224,7 @@ python -m pytest tests/test_service_smoke.py
 
 ### Tasks
 - [x] Создать `frontend/` как TypeScript web-приложение.
-- [x] Реализовать API client для `transcribe-doc serve`.
+- [x] Реализовать API client для `mnema serve`.
 - [x] Реализовать upload/start-job flow для single-file MVP.
 - [x] Реализовать job list и job detail view.
 - [x] Реализовать transcript viewer для `segments.json` и `words.json`.
@@ -239,7 +239,7 @@ python -m pytest tests/test_service_smoke.py
 
 ### Validation
 ```sh
-python -m transcribe_doc.cli.main serve --host 127.0.0.1 --port 8765
+python -m mnema.cli.main serve --host 127.0.0.1 --port 8765
 cd frontend
 npm test
 npm run build
@@ -274,8 +274,8 @@ npm run e2e
 python -m pytest
 python -m ruff check src tests
 python -m mypy src
-python -m transcribe_doc.cli.main run sample_data/dialogue.mp3 --out ./output
-python -m transcribe_doc.cli.main serve --host 127.0.0.1 --port 8765
+python -m mnema.cli.main run sample_data/dialogue.mp3 --out ./output
+python -m mnema.cli.main serve --host 127.0.0.1 --port 8765
 cd frontend && npm run build
 cd frontend && npm run tauri:build
 ```

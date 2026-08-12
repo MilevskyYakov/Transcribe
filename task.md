@@ -495,34 +495,34 @@ API слушает только локальный интерфейс по ум�
 Нужен CLI entrypoint, например:
 
 ```bash
-transcribe-doc file.mp4 --out ./output
+mnema file.mp4 --out ./output
 ```
 
 ### 15.1 Required commands
 
 #### Single file
 ```bash
-transcribe-doc run input.mp4 --out ./output
+mnema run input.mp4 --out ./output
 ```
 
 #### Multiple files
 ```bash
-transcribe-doc batch ./file1.mp4 ./file2.mp3 --out ./output
+mnema batch ./file1.mp4 ./file2.mp3 --out ./output
 ```
 
 #### Directory
 ```bash
-transcribe-doc dir ./incoming --out ./output
+mnema dir ./incoming --out ./output
 ```
 
 #### Watch folder
 ```bash
-transcribe-doc watch ./incoming --out ./output
+mnema watch ./incoming --out ./output
 ```
 
 #### Service
 ```bash
-transcribe-doc serve --host 127.0.0.1 --port 8765
+mnema serve --host 127.0.0.1 --port 8765
 ```
 
 ### 15.2 CLI options

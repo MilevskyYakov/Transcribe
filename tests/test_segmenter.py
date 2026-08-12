@@ -1,5 +1,5 @@
-from transcribe_doc.app.models import TranscriptSegment, WordToken
-from transcribe_doc.postprocess.segmenter import split_segments_on_long_pauses
+from mnema.app.models import TranscriptSegment, WordToken
+from mnema.postprocess.segmenter import split_segments_on_long_pauses
 
 
 def test_split_segments_on_long_pauses_splits_single_segment_by_word_gap() -> None:

@@ -2,9 +2,9 @@ from pathlib import Path
 
 import pytest
 
-from transcribe_doc.app.exceptions import ExternalDependencyError
-from transcribe_doc.asr.base import AsrTranscription
-from transcribe_doc.asr.whisper_backend import WhisperBackend
+from mnema.app.exceptions import ExternalDependencyError
+from mnema.asr.base import AsrTranscription
+from mnema.asr.whisper_backend import WhisperBackend
 
 
 class FakeWhisperModel:

@@ -1,10 +1,10 @@
 import pytest
 
-from transcribe_doc.app.config import AppConfig, AsrSection
-from transcribe_doc.app.exceptions import ConfigurationError
-from transcribe_doc.asr.factory import build_asr_backend
-from transcribe_doc.asr.onnx_asr_backend import OnnxAsrBackend
-from transcribe_doc.asr.whisper_backend import WhisperBackend
+from mnema.app.config import AppConfig, AsrSection
+from mnema.app.exceptions import ConfigurationError
+from mnema.asr.factory import build_asr_backend
+from mnema.asr.onnx_asr_backend import OnnxAsrBackend
+from mnema.asr.whisper_backend import WhisperBackend
 
 
 def test_build_asr_backend_returns_whisper_backend_for_whisper_config() -> None:

@@ -1,13 +1,13 @@
-from transcribe_doc.app.config import AppConfig, DiarizationSection
-from transcribe_doc.diarization.factory import build_diarization_backend
-from transcribe_doc.diarization.heuristic_multi_speaker_backend import (
+from mnema.app.config import AppConfig, DiarizationSection
+from mnema.diarization.factory import build_diarization_backend
+from mnema.diarization.heuristic_multi_speaker_backend import (
     HeuristicMultiSpeakerDiarizationBackend,
 )
-from transcribe_doc.diarization.resemblyzer_backend import (
+from mnema.diarization.resemblyzer_backend import (
     ResemblyzerDiarizationBackend,
     is_resemblyzer_available,
 )
-from transcribe_doc.diarization.single_speaker_backend import SingleSpeakerDiarizationBackend
+from mnema.diarization.single_speaker_backend import SingleSpeakerDiarizationBackend
 
 
 def test_build_diarization_backend_returns_single_speaker_backend_when_enabled() -> None:
@@ -54,7 +54,7 @@ def test_build_diarization_backend_falls_back_to_heuristic_when_resemblyzer_miss
 
     is_resemblyzer_available.cache_clear()
     monkeypatch.setattr(
-        "transcribe_doc.diarization.factory.is_resemblyzer_available",
+        "mnema.diarization.factory.is_resemblyzer_available",
         lambda: False,
     )
 

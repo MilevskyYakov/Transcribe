@@ -1,5 +1,5 @@
-from transcribe_doc.app.models import SpeakerMapping, TranscriptSegment
-from transcribe_doc.diarization.speaker_mapper import apply_expected_speaker_mapping
+from mnema.app.models import SpeakerMapping, TranscriptSegment
+from mnema.diarization.speaker_mapper import apply_expected_speaker_mapping
 
 
 def test_apply_expected_speaker_mapping_maps_single_expected_speaker_unambiguously() -> None:

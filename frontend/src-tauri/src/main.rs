@@ -29,5 +29,5 @@ fn main() {
             commands::set_default_model
         ])
         .run(tauri::generate_context!())
-        .expect("error while running Transcribe Doc");
+        .expect("error while running Mnema");
 }

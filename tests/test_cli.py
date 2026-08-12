@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from transcribe_doc.cli.main import build_parser, main
-from transcribe_doc.cli import commands
+from mnema.cli import commands
+from mnema.cli.main import build_parser, main
 
 
 def test_parser_defines_required_commands() -> None:
@@ -41,20 +41,20 @@ def test_serve_accepts_app_packaging_overrides() -> None:
             "--port",
             "0",
             "--app-data-dir",
-            "/tmp/transcribe-doc-app",
+            "/tmp/mnema-app",
             "--media-bin-dir",
-            "/tmp/transcribe-doc-bin",
+            "/tmp/mnema-bin",
         ]
     )
 
     assert args.command == "serve"
-    assert args.app_data_dir == "/tmp/transcribe-doc-app"
-    assert args.media_bin_dir == "/tmp/transcribe-doc-bin"
+    assert args.app_data_dir == "/tmp/mnema-app"
+    assert args.media_bin_dir == "/tmp/mnema-bin"
 
 
 def test_serve_app_data_dir_sets_durable_model_dir(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "old-cache"))
-    monkeypatch.setenv("TRANSCRIBE_DOC_MODEL_DIR", str(tmp_path / "old-models"))
+    monkeypatch.setenv("MNEMA_MODEL_DIR", str(tmp_path / "old-models"))
     monkeypatch.setattr(commands, "serve_command", lambda args, config: 0)
 
     result = main(
@@ -69,7 +69,7 @@ def test_serve_app_data_dir_sets_durable_model_dir(tmp_path: Path, monkeypatch) 
 
     assert result == 0
     assert os.environ["XDG_CACHE_HOME"] == str(tmp_path / "app-data" / "cache")
-    assert os.environ["TRANSCRIBE_DOC_MODEL_DIR"] == str(tmp_path / "app-data" / "models")
+    assert os.environ["MNEMA_MODEL_DIR"] == str(tmp_path / "app-data" / "models")
 
 
 def test_python_module_invocation_executes_cli_help() -> None:
@@ -77,6 +77,25 @@ def test_python_module_invocation_executes_cli_help() -> None:
     env = os.environ.copy()
     env["PYTHONPATH"] = str(repo_root / "src")
 
+    result = subprocess.run(
+        [sys.executable, "-m", "mnema.cli.main", "--help"],
+        cwd=repo_root,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert "mnema" in result.stdout
+    assert "run" in result.stdout
+    assert "serve" in result.stdout
+
+
+def test_legacy_module_help_redirects_to_mnema() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(repo_root / "src")
     result = subprocess.run(
         [sys.executable, "-m", "transcribe_doc.cli.main", "--help"],
         cwd=repo_root,
@@ -87,5 +106,4 @@ def test_python_module_invocation_executes_cli_help() -> None:
     )
 
     assert result.returncode == 0
-    assert "run" in result.stdout
-    assert "serve" in result.stdout
+    assert "mnema" in result.stdout

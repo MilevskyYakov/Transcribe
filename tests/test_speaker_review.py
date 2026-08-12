@@ -1,4 +1,4 @@
-from transcribe_doc.storage.speaker_review import (
+from mnema.storage.speaker_review import (
     apply_speaker_assignments_to_segment_payloads,
     build_speaker_review_payload,
     update_speaker_assignments,

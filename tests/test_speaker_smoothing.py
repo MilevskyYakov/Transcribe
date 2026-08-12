@@ -1,5 +1,5 @@
-from transcribe_doc.app.models import SpeakerMapping, TranscriptSegment
-from transcribe_doc.postprocess.speaker_smoothing import smooth_speaker_turns
+from mnema.app.models import SpeakerMapping, TranscriptSegment
+from mnema.postprocess.speaker_smoothing import smooth_speaker_turns
 
 
 def _segment(

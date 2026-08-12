@@ -1,8 +1,8 @@
 [package]
-name = "transcribe-doc"
+name = "mnema"
 version = "0.1.1"
 description = "Local-first transcription desktop app"
-authors = ["Transcribe Doc"]
+authors = ["Mnema"]
 edition = "2021"
 
 [build-dependencies]

@@ -1,5 +1,5 @@
-from transcribe_doc.app.models import TranscriptSegment
-from transcribe_doc.postprocess.transcript_cleaner import apply_conservative_cleanup
+from mnema.app.models import TranscriptSegment
+from mnema.postprocess.transcript_cleaner import apply_conservative_cleanup
 
 
 def test_apply_conservative_cleanup_normalizes_spacing_without_rewriting_text() -> None:

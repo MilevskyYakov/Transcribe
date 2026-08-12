@@ -1,6 +1,6 @@
 # Signed macOS in-app updater
 
-Transcribe Doc uses the Tauri v2 updater for the packaged macOS app. The updater is only a desktop-app feature; the browser dashboard remains a development surface and does not install app updates.
+Mnema uses the Tauri v2 updater for the packaged macOS app. The updater is only a desktop-app feature; the browser dashboard remains a development surface and does not install app updates.
 
 ## Release hosting
 
@@ -25,25 +25,25 @@ Generate keys outside the repo. For CI/non-interactive release builds, create a 
 
 ```bash
 cd frontend
-npx tauri signer generate --ci -p '<strong-password>' -w ~/.tauri/transcribe-doc-updater.key
+npx tauri signer generate --ci -p '<strong-password>' -w ~/.tauri/mnema-updater.key
 ```
 
-Then copy only the generated public key into `frontend/src-tauri/tauri.conf.json` → `plugins.updater.pubkey`. Do not commit `~/.tauri/transcribe-doc-updater.key`.
+Then copy only the generated public key into `frontend/src-tauri/tauri.conf.json` → `plugins.updater.pubkey`. Do not commit `~/.tauri/mnema-updater.key`.
 
 ## Local/staging signed build
 
 ```bash
 cd frontend
-export TAURI_SIGNING_PRIVATE_KEY="$HOME/.tauri/transcribe-doc-updater.key"
+export TAURI_SIGNING_PRIVATE_KEY="$HOME/.tauri/mnema-updater.key"
 # export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="..."  # only if the key has a password
 npm run package:mac
 ```
 
 With `bundle.createUpdaterArtifacts=true`, macOS builds create the normal `.app` plus updater artifacts under `frontend/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/`:
 
-- `Transcribe Doc.app`
-- `Transcribe Doc.app.tar.gz`
-- `Transcribe Doc.app.tar.gz.sig`
+- `Mnema.app`
+- `Mnema.app.tar.gz`
+- `Mnema.app.tar.gz.sig`
 
 ## `latest.json` shape for GitHub Releases
 
@@ -56,7 +56,7 @@ For Apple Silicon macOS, attach a `latest.json` similar to:
   "pub_date": "2026-07-03T00:00:00Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "CONTENTS_OF_Transcribe Doc.app.tar.gz.sig",
+      "signature": "CONTENTS_OF_Mnema.app.tar.gz.sig",
       "url": "https://github.com/MilevskyYakov/Transcribe/releases/download/v0.2.0/Transcribe%20Doc.app.tar.gz"
     }
   }
@@ -71,7 +71,7 @@ The `signature` value is the content of the `.sig` file, not a path or URL.
 2. Download at least one ASR model and confirm `/models` or the UI shows it as `ready`.
 3. Save settings and create or keep one user output/history item.
 4. Bump the app version for version B in `frontend/src-tauri/tauri.conf.json` and `frontend/package.json` when appropriate.
-5. Build B with signing env set and publish `Transcribe Doc.app.tar.gz`, its `.sig`, and `latest.json` to the release endpoint.
+5. Build B with signing env set and publish `Mnema.app.tar.gz`, its `.sig`, and `latest.json` to the release endpoint.
 6. Open installed app A, use the sidebar update card, and install B.
 7. Restart the app when prompted.
 8. Confirm the backend is online, the previously downloaded model is still `ready`, settings are preserved, and user output/history is still available.

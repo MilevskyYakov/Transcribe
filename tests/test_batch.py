@@ -2,11 +2,11 @@ import threading
 import time
 from pathlib import Path
 
-from transcribe_doc.app.config import AppConfig, AppSection, RuntimeSection, WatchFolderSection
-from transcribe_doc.app.models import Job, JobStatus
-from transcribe_doc.core import batch as batch_module
-from transcribe_doc.core.batch import discover_media_files, process_batch, process_directory, scan_watch_folder
-from transcribe_doc.core.processing import ProcessingResult
+from mnema.app.config import AppConfig, AppSection, RuntimeSection, WatchFolderSection
+from mnema.app.models import Job, JobStatus
+from mnema.core import batch as batch_module
+from mnema.core.batch import discover_media_files, process_batch, process_directory, scan_watch_folder
+from mnema.core.processing import ProcessingResult
 
 
 def test_process_batch_continues_after_failed_item(tmp_path: Path, monkeypatch) -> None:

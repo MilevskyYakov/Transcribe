@@ -1,4 +1,4 @@
-# Transcribe Doc macOS app
+# Mnema macOS app
 
 Проект предназначен для локальной обработки аудио- и видеофайлов на macOS Apple Silicon с получением почти дословного транскрипта, diarization, summary и экспортов в несколько форматов.
 
@@ -135,34 +135,34 @@ project-root/
 
 ### Один файл
 ```bash
-transcribe-doc run input.mp4 --out ./output
+mnema run input.mp4 --out ./output
 ```
 
 ### Несколько файлов
 ```bash
-transcribe-doc batch ./a.mp4 ./b.mp3 --out ./output
+mnema batch ./a.mp4 ./b.mp3 --out ./output
 ```
 
 ### Папка
 ```bash
-transcribe-doc dir ./incoming --out ./output
+mnema dir ./incoming --out ./output
 ```
 
 ### Watch folder
 ```bash
-transcribe-doc watch ./incoming --out ./output
+mnema watch ./incoming --out ./output
 ```
 
 ### Локальный сервис
 ```bash
-transcribe-doc serve --host 127.0.0.1 --port 8765
+mnema serve --host 127.0.0.1 --port 8765
 ```
 
 ## App и frontend
 
 Главная пользовательская поверхность — Tauri desktop app. Он сам запускает локальный backend на свободном `127.0.0.1` порту, хранит runtime data в macOS Application Support и использует тот же React UI поверх local service API.
 
-Browser frontend остаётся dev/debug режимом поверх `transcribe-doc serve`. Он тонкий: не запускает speech pipeline напрямую, а работает через локальный API и общую job-state модель.
+Browser frontend остаётся dev/debug режимом поверх `mnema serve`. Он тонкий: не запускает speech pipeline напрямую, а работает через локальный API и общую job-state модель.
 
 Первый экран приложения:
 - загрузка одного media-файла;
@@ -231,7 +231,7 @@ output/<job_id>/
 ```bash
 uv venv --python python3.11 .venv
 uv pip install -e ".[dev]"
-.venv/bin/python -m transcribe_doc.cli.main --help
+.venv/bin/python -m mnema.cli.main --help
 ```
 
 `uv pip` здесь намеренно используется вместо `.venv/bin/python -m pip`: `uv venv`
@@ -259,7 +259,7 @@ npm run dev
 В одном терминале:
 
 ```bash
-.venv/bin/python -m transcribe_doc.cli.main serve --host 127.0.0.1 --port 8765
+.venv/bin/python -m mnema.cli.main serve --host 127.0.0.1 --port 8765
 ```
 
 Во втором терминале:
@@ -294,7 +294,7 @@ npm run package:mac
 `aarch64-apple-darwin`.
 
 `package:mac` только создаёт bundle в репозитории. Уже установленное приложение
-в `/Applications/Transcribe Doc.app` после изменений в коде само не обновляется:
+в `/Applications/Mnema.app` после изменений в коде само не обновляется:
 для обычного локального обновления установленного `.app` используйте:
 
 ```bash
@@ -303,7 +303,7 @@ npm run install:local
 ```
 
 `install:local` сначала выполняет `package:mac`, затем безопасно заменяет
-`/Applications/Transcribe Doc.app`, снимает quarantine metadata best-effort и
+`/Applications/Mnema.app`, снимает quarantine metadata best-effort и
 открывает приложение. Если уже запущен старый app, команда остановится с явным
 сообщением; чтобы автоматически закрыть его перед заменой:
 
@@ -341,12 +341,12 @@ Full release/update runbook: `docs/mac-updater.md`.
 
 Локальные ASR-модели в packaged desktop app — постоянные данные приложения, а
 не disposable cache. Backend sidecar получает `--app-data-dir`, после чего
-использует `TRANSCRIBE_DOC_MODEL_DIR=<app_data_dir>/models`: Whisper-файлы лежат
+использует `MNEMA_MODEL_DIR=<app_data_dir>/models`: Whisper-файлы лежат
 в `<app_data_dir>/models/whisper`, external/ONNX ASR runtime — в
 `<app_data_dir>/models/external`. При локальном upgrade/replacement через
 `npm run install:local` не удаляйте macOS Application Support; модель должна
 оставаться `ready` в `/models` и в UI без повторного скачивания. Старые валидные
-модели из `<app_data_dir>/cache/whisper`, `<app_data_dir>/cache/transcribe-doc/models`
+модели из `<app_data_dir>/cache/whisper`, `<app_data_dir>/cache/mnema/models`
 или пользовательского `~/.cache` копируются в canonical model dir при проверке
 статуса; повреждённые/недокачанные файлы остаются `corrupt` и не считаются
 готовыми.

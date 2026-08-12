@@ -1,5 +1,4 @@
-"""Project package for the transcribe-doc scaffold."""
+"""Compatibility namespace for integrations migrating to :mod:`mnema`."""
 
-__all__ = ["__version__"]
-
-__version__ = "0.1.1"
+from mnema import __path__ as __path__
+from mnema import __version__ as __version__

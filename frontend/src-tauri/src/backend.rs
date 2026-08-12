@@ -168,7 +168,7 @@ impl BackendState {
             self.media_bin_dir.display().to_string(),
         ];
 
-        eprintln!("Starting Transcribe Doc backend on {api_base_url}");
+        eprintln!("Starting Mnema backend on {api_base_url}");
         let sidecar_path = backend_sidecar_path();
         let mut child = match Command::new(&sidecar_path)
             .args(args)
@@ -193,14 +193,14 @@ impl BackendState {
         if let Some(stdout) = child.stdout.take() {
             thread::spawn(move || {
                 for line in BufReader::new(stdout).lines().map_while(Result::ok) {
-                    println!("transcribe-doc backend: {line}");
+                    println!("mnema backend: {line}");
                 }
             });
         }
         if let Some(stderr) = child.stderr.take() {
             thread::spawn(move || {
                 for line in BufReader::new(stderr).lines().map_while(Result::ok) {
-                    eprintln!("transcribe-doc backend: {line}");
+                    eprintln!("mnema backend: {line}");
                 }
             });
         }
@@ -218,6 +218,7 @@ pub(crate) fn start_backend<R: Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<BackendState, Box<dyn std::error::Error>> {
     let app_data_dir = app.path().app_data_dir()?;
+    migrate_legacy_app_data(&app_data_dir)?;
     let output_dir = app_data_dir.join("output");
     let cache_dir = app_data_dir.join("cache");
     let model_dir = app_data_dir.join("models");
@@ -260,17 +261,44 @@ pub(crate) fn start_backend<R: Runtime>(
     Ok(state)
 }
 
+fn migrate_legacy_app_data(app_data_dir: &Path) -> std::io::Result<()> {
+    let Some(parent) = app_data_dir.parent() else {
+        return Ok(());
+    };
+    copy_missing_tree(&parent.join("local.transcribe-doc"), app_data_dir)
+}
+
+fn copy_missing_tree(source: &Path, destination: &Path) -> std::io::Result<()> {
+    if !source.is_dir() {
+        return Ok(());
+    }
+    fs::create_dir_all(destination)?;
+    for entry in fs::read_dir(source)? {
+        let entry = entry?;
+        let source_path = entry.path();
+        let destination_path = destination.join(entry.file_name());
+        if source_path.is_dir() {
+            copy_missing_tree(&source_path, &destination_path)?;
+        } else if !destination_path.exists() {
+            let temporary_path = destination_path.with_extension("mnema-migration");
+            let _ = fs::remove_file(&temporary_path);
+            fs::copy(source_path, &temporary_path)?;
+            fs::rename(temporary_path, destination_path)?;
+        }
+    }
+    Ok(())
+}
+
 fn backend_sidecar_path() -> PathBuf {
     if let Some(path) = std::env::current_exe()
         .ok()
-        .and_then(|path| path.parent().map(|dir| dir.join("transcribe-doc-backend")))
+        .and_then(|path| path.parent().map(|dir| dir.join("mnema-backend")))
         .filter(|path| path.exists())
     {
         return path;
     }
 
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("binaries/transcribe-doc-backend-aarch64-apple-darwin")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("binaries/mnema-backend-aarch64-apple-darwin")
 }
 
 pub(crate) fn binary_path(root: &Path, name: &str) -> Option<PathBuf> {
@@ -325,4 +353,40 @@ fn resource_file(resource_dir: &Path, relative: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../")
         .join(relative)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::copy_missing_tree;
+    use std::{fs, path::PathBuf};
+
+    #[test]
+    fn migration_copies_missing_data_and_keeps_newer_files() {
+        let root = unique_temp_dir();
+        let old = root.join("local.transcribe-doc");
+        let new = root.join("local.mnema");
+        fs::create_dir_all(old.join("models")).unwrap();
+        fs::create_dir_all(&new).unwrap();
+        fs::write(old.join("settings.json"), "old settings").unwrap();
+        fs::write(old.join("models/model.bin"), "model").unwrap();
+        fs::write(new.join("settings.json"), "new settings").unwrap();
+
+        copy_missing_tree(&old, &new).unwrap();
+        copy_missing_tree(&old, &new).unwrap();
+
+        assert_eq!(
+            fs::read_to_string(new.join("settings.json")).unwrap(),
+            "new settings"
+        );
+        assert_eq!(
+            fs::read_to_string(new.join("models/model.bin")).unwrap(),
+            "model"
+        );
+        assert!(old.join("models/model.bin").exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    fn unique_temp_dir() -> PathBuf {
+        std::env::temp_dir().join(format!("mnema-migration-{}", std::process::id()))
+    }
 }

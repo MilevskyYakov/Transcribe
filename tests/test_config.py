@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from transcribe_doc.app.config import AppConfig, config_for_app_data_dir, load_config
+from mnema.app.config import AppConfig, config_for_app_data_dir, load_config
 
 
 def test_load_config_reads_default_yaml() -> None:
@@ -17,7 +17,7 @@ def test_load_config_reads_default_yaml() -> None:
 
 
 def test_config_for_app_data_dir_keeps_runtime_data_under_app_support(tmp_path: Path) -> None:
-    config = config_for_app_data_dir(AppConfig(), tmp_path / "Transcribe Doc")
+    config = config_for_app_data_dir(AppConfig(), tmp_path / "Mnema")
 
-    assert config.app.output_dir == str(tmp_path / "Transcribe Doc" / "output")
-    assert config.app.temp_dir == str(tmp_path / "Transcribe Doc" / "tmp")
+    assert config.app.output_dir == str(tmp_path / "Mnema" / "output")
+    assert config.app.temp_dir == str(tmp_path / "Mnema" / "tmp")

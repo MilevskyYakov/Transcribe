@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  AUTOSAVE_MARKDOWN_DIR_STORAGE_KEY,
   DEFAULT_MODEL_STORAGE_KEY,
   isTauriRuntime,
+  loadWebAutosaveMarkdownDir,
   loadWebDefaultModel,
   resolveAppEnvironment,
   saveDefaultModel
@@ -42,5 +44,23 @@ describe("app environment", () => {
 
     expect(localStorage.getItem(DEFAULT_MODEL_STORAGE_KEY)).toBe("tiny");
     expect(loadWebDefaultModel()).toBe("tiny");
+  });
+
+  it("migrates the legacy default model storage key", () => {
+    localStorage.setItem("transcribe-doc-default-model", "small");
+
+    expect(loadWebDefaultModel()).toBe("small");
+    expect(localStorage.getItem(DEFAULT_MODEL_STORAGE_KEY)).toBe("small");
+  });
+
+  it("migrates legacy browser settings without overriding Mnema values", () => {
+    localStorage.setItem("transcribe-doc-default-model", "small");
+    localStorage.setItem("transcribe-doc-autosave-markdown-dir", "/legacy/output");
+    localStorage.setItem(DEFAULT_MODEL_STORAGE_KEY, "large-v3");
+
+    expect(loadWebDefaultModel()).toBe("large-v3");
+    expect(loadWebAutosaveMarkdownDir()).toBe("/legacy/output");
+    expect(localStorage.getItem(AUTOSAVE_MARKDOWN_DIR_STORAGE_KEY)).toBe("/legacy/output");
+    expect(localStorage.getItem("transcribe-doc-autosave-markdown-dir")).toBe("/legacy/output");
   });
 });

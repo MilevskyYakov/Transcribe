@@ -62,8 +62,8 @@
 - [ ] `python -m ruff check src tests`
 - [ ] `python -m mypy src`
 - [ ] `python -m pytest`
-- [ ] `python -m transcribe_doc.cli.main run sample_data/dialogue.mp3 --out ./output`
-- [ ] `python -m transcribe_doc.cli.main serve --host 127.0.0.1 --port 8765`
+- [ ] `python -m mnema.cli.main run sample_data/dialogue.mp3 --out ./output`
+- [ ] `python -m mnema.cli.main serve --host 127.0.0.1 --port 8765`
 - [ ] `cd frontend && npm test`
 - [ ] `cd frontend && npm run build`
 - [ ] `cd frontend && npm run tauri:build`
@@ -87,8 +87,8 @@ python -m pytest tests/test_exports.py tests/test_summary.py tests/test_schema.p
 python -m pytest tests/test_batch.py tests/test_watch_folder.py tests/test_service_api.py tests/test_service_smoke.py
 python -m ruff check src tests
 python -m mypy src
-python -m transcribe_doc.cli.main run sample_data/dialogue.mp3 --out ./output --speaker-manifest sample_data/speakers.json --save-artifacts
-python -m transcribe_doc.cli.main serve --host 127.0.0.1 --port 8765
+python -m mnema.cli.main run sample_data/dialogue.mp3 --out ./output --speaker-manifest sample_data/speakers.json --save-artifacts
+python -m mnema.cli.main serve --host 127.0.0.1 --port 8765
 cd frontend && npm test
 cd frontend && npm run build
 cd frontend && npm run tauri:build

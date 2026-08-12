@@ -2,9 +2,9 @@ from pathlib import Path
 
 import pytest
 
-from transcribe_doc.app.exceptions import ExternalDependencyError
-from transcribe_doc.media.normalizer import build_normalize_command, normalize_media
-from transcribe_doc.media.probes import build_ffprobe_command, probe_media
+from mnema.app.exceptions import ExternalDependencyError
+from mnema.media.normalizer import build_normalize_command, normalize_media
+from mnema.media.probes import build_ffprobe_command, probe_media
 
 
 def test_build_ffprobe_command_targets_input_file(tmp_path: Path) -> None:

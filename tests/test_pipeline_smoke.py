@@ -1,12 +1,12 @@
-from transcribe_doc.alignment.base import AlignmentBackend
-from transcribe_doc.app.models import SpeakerMapping, TranscriptSegment, WordToken
-from transcribe_doc.asr.base import AsrBackend, AsrTranscription
-from transcribe_doc.asr.transcription_service import TranscriptionService
-from transcribe_doc.diarization.base import DiarizationBackend
-from transcribe_doc.diarization.heuristic_multi_speaker_backend import (
+from mnema.alignment.base import AlignmentBackend
+from mnema.app.models import SpeakerMapping, TranscriptSegment, WordToken
+from mnema.asr.base import AsrBackend, AsrTranscription
+from mnema.asr.transcription_service import TranscriptionService
+from mnema.diarization.base import DiarizationBackend
+from mnema.diarization.heuristic_multi_speaker_backend import (
     HeuristicMultiSpeakerDiarizationBackend,
 )
-from transcribe_doc.diarization.single_speaker_backend import SingleSpeakerDiarizationBackend
+from mnema.diarization.single_speaker_backend import SingleSpeakerDiarizationBackend
 
 
 class FakeAsrBackend(AsrBackend):

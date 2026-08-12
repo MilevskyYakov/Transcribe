@@ -15,8 +15,10 @@ interface TauriBootstrapPayload {
   backend_lifecycle?: BackendLifecycle | null;
 }
 
-export const DEFAULT_MODEL_STORAGE_KEY = "transcribe-doc-default-model";
-export const AUTOSAVE_MARKDOWN_DIR_STORAGE_KEY = "transcribe-doc-autosave-markdown-dir";
+export const DEFAULT_MODEL_STORAGE_KEY = "mnema-default-model";
+export const AUTOSAVE_MARKDOWN_DIR_STORAGE_KEY = "mnema-autosave-markdown-dir";
+const LEGACY_DEFAULT_MODEL_STORAGE_KEY = "transcribe-doc-default-model";
+const LEGACY_AUTOSAVE_MARKDOWN_DIR_STORAGE_KEY = "transcribe-doc-autosave-markdown-dir";
 
 declare global {
   interface Window {
@@ -98,7 +100,7 @@ export async function restartBackend(isTauri: boolean): Promise<BackendLifecycle
 }
 
 export function loadWebDefaultModel(): string | null {
-  return normalizeOptionalValue(storage()?.getItem(DEFAULT_MODEL_STORAGE_KEY));
+  return loadMigratedStorageValue(DEFAULT_MODEL_STORAGE_KEY, LEGACY_DEFAULT_MODEL_STORAGE_KEY);
 }
 
 export async function saveDefaultModel(modelName: string, isTauri: boolean): Promise<string> {
@@ -115,7 +117,10 @@ export async function saveDefaultModel(modelName: string, isTauri: boolean): Pro
 }
 
 export function loadWebAutosaveMarkdownDir(): string | null {
-  return normalizeOptionalValue(storage()?.getItem(AUTOSAVE_MARKDOWN_DIR_STORAGE_KEY));
+  return loadMigratedStorageValue(
+    AUTOSAVE_MARKDOWN_DIR_STORAGE_KEY,
+    LEGACY_AUTOSAVE_MARKDOWN_DIR_STORAGE_KEY
+  );
 }
 
 export async function saveAutosaveMarkdownDir(
@@ -188,4 +193,13 @@ function normalizeOptionalValue(value: string | null | undefined): string | null
 
 function storage(): Storage | null {
   return typeof localStorage === "undefined" ? null : localStorage;
+}
+
+function loadMigratedStorageValue(key: string, legacyKey: string): string | null {
+  const currentStorage = storage();
+  const value = normalizeOptionalValue(currentStorage?.getItem(key));
+  if (value) return value;
+  const legacyValue = normalizeOptionalValue(currentStorage?.getItem(legacyKey));
+  if (legacyValue) currentStorage?.setItem(key, legacyValue);
+  return legacyValue;
 }

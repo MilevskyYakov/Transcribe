@@ -2,9 +2,9 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
 
-from transcribe_doc.app.config import AppConfig, AppSection
-from transcribe_doc.service import job_endpoints
-from transcribe_doc.service.batch_session_store import (
+from mnema.app.config import AppConfig, AppSection
+from mnema.service import job_endpoints
+from mnema.service.batch_session_store import (
     create_batch_session,
     list_batch_sessions,
     load_batch_session,
@@ -12,7 +12,7 @@ from transcribe_doc.service.batch_session_store import (
     reconcile_batch_session_jobs,
     write_batch_session,
 )
-from transcribe_doc.service.job_store import load_job, mark_interrupted_jobs, write_job_payload
+from mnema.service.job_store import load_job, mark_interrupted_jobs, write_job_payload
 
 
 class RecordingExecutor:
