@@ -6,8 +6,8 @@
 
 Latest macOS Apple Silicon build:
 
-- [Download the latest release](https://github.com/MilevskyYakov/Transcribe/releases/latest)
-- Direct updater feed: `https://github.com/MilevskyYakov/Transcribe/releases/latest/download/latest.json`
+- [Download the latest release](https://github.com/MilevskyYakov/Mnema/releases/latest)
+- Direct updater feed: `https://github.com/MilevskyYakov/Mnema/releases/latest/download/latest.json`
 
 The public release is a local-first desktop app. It runs the transcription backend on your Mac and stores downloaded ASR models, settings, transcripts, and job history in the app-managed local data area.
 
@@ -328,7 +328,7 @@ show no-update/update/error states, download a signed update, and install it.
 After install the app asks for a restart so the new version opens cleanly.
 
 Default release endpoint: GitHub Releases static `latest.json` at
-`https://github.com/MilevskyYakov/Transcribe/releases/latest/download/latest.json`.
+`https://github.com/MilevskyYakov/Mnema/releases/latest/download/latest.json`.
 Updater artifacts are generated during Tauri build when the release environment
 provides `TAURI_SIGNING_PRIVATE_KEY` (and optional
 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`). The private key must stay outside the repo;

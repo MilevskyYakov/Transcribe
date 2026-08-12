@@ -1,6 +1,6 @@
 # Public release checklist
 
-Use this checklist before switching `MilevskyYakov/Transcribe` from private to public.
+Use this checklist before switching `MilevskyYakov/Mnema` from private to public.
 
 ## Repository readiness
 
@@ -23,7 +23,7 @@ Use this checklist before switching `MilevskyYakov/Transcribe` from private to p
 ## Manual smoke after making public
 
 ```bash
-curl -L -f https://github.com/MilevskyYakov/Transcribe/releases/latest/download/latest.json
+curl -L -f https://github.com/MilevskyYakov/Mnema/releases/latest/download/latest.json
 ```
 
 Then open the installed app and use the “Обновление” card. Confirm that the app no longer shows the private-repo 404 state.
