@@ -58,6 +58,7 @@ import {
   UPLOAD_UNSUPPORTED_MEDIA_MESSAGE
 } from "./components/UploadPanel";
 import { formatBytes } from "./format";
+import { deliverTerminalNotifications, requestNotificationPermission } from "./notifications";
 import type {
   AppEnvironment,
   Artifact,
@@ -227,6 +228,7 @@ export function App() {
       setJobs(nextJobs);
       setModels(nextModels);
       setBatchSessions(nextBatchSessions);
+      await deliverTerminalNotifications(nextJobs, nextBatchSessions, isManagedApp);
       setSelectedModelName((current) =>
         nextModels.models.some((model) => model.name === current) ? current : nextModels.current_model
       );
@@ -569,6 +571,7 @@ export function App() {
     }
     setIsSubmitting(true);
     try {
+      if (isManagedApp) await requestNotificationPermission();
       const job = await client.createJob(
         mediaSelection.file ?? mediaSelection.path ?? "",
         transcriptionTitle,
@@ -612,6 +615,7 @@ export function App() {
     }
     setIsSubmitting(true);
     try {
+      if (isManagedApp) await requestNotificationPermission();
       const result = await client.submitBatchSessionItem(
         selectedBatchSession.session_id,
         selectedBatchItem.item_id,
