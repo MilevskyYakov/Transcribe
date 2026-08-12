@@ -22,7 +22,7 @@
 | Rust package / executable / sidecar | `mnema`, `mnema-backend` |
 | Browser storage | `mnema-api-base`, `mnema-default-model`, `mnema-autosave-markdown-dir` |
 | Installer | `Mnema.app` |
-| Updater repository | `MilevskyYakov/Transcribe` (repository rename is outside scope) |
+| Updater repository | `MilevskyYakov/Mnema` |
 
 ## Upgrade behavior
 
