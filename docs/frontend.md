@@ -4,7 +4,7 @@
 
 Frontend is the UI layer for the canonical Tauri desktop app. It gives the user a simple working surface for creating jobs, tracking progress, reading transcripts, checking diagnostics, and downloading artifacts.
 
-The same React client can run in a browser against `transcribe-doc serve`, but that browser mode is for development and diagnostics. Product decisions should assume the packaged Tauri app is the main user surface.
+The same React client can run in a browser against `mnema serve`, but that browser mode is for development and diagnostics. Product decisions should assume the packaged Tauri app is the main user surface.
 
 ## Product Scope
 

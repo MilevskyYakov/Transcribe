@@ -6,9 +6,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
-from transcribe_doc.app.models import SpeakerMapping, TranscriptSegment, WordToken
-from transcribe_doc.asr.base import AsrTranscription
-from transcribe_doc.cli.main import main
+from mnema.app.models import SpeakerMapping, TranscriptSegment, WordToken
+from mnema.asr.base import AsrTranscription
+from mnema.cli.main import main
 
 
 @dataclass(frozen=True)
@@ -128,7 +128,7 @@ media:
         return self.config_path
 
     def use_asr_backend(self, backend: object) -> None:
-        self.monkeypatch.setattr("transcribe_doc.cli.commands.build_asr_backend", lambda config: backend)
+        self.monkeypatch.setattr("mnema.cli.commands.build_asr_backend", lambda config: backend)
 
     def use_crashing_asr(self, error: Exception) -> None:
         self.use_asr_backend(CrashingAsrBackend(error))
@@ -147,11 +147,11 @@ media:
         )
 
     def disable_resemblyzer(self) -> None:
-        self.monkeypatch.setattr("transcribe_doc.diarization.factory.is_resemblyzer_available", lambda: False)
+        self.monkeypatch.setattr("mnema.diarization.factory.is_resemblyzer_available", lambda: False)
 
     def use_low_quality_diarization(self) -> None:
         self.monkeypatch.setattr(
-            "transcribe_doc.cli.commands.build_diarization_backend",
+            "mnema.cli.commands.build_diarization_backend",
             lambda config, speaker_manifest=None: LowQualityDiarizationBackend(),
         )
 

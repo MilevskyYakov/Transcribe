@@ -1,4 +1,4 @@
-from transcribe_doc.app.models import (
+from mnema.app.models import (
     ArtifactManifest,
     Job,
     JobStatus,

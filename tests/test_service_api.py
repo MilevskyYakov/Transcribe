@@ -5,17 +5,17 @@ from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 
-from transcribe_doc.app.config import AppConfig, AppSection
-from transcribe_doc.app.models import ArtifactManifest, Job, JobStatus
-from transcribe_doc.core.batch import BatchItemResult, BatchResult
-from transcribe_doc.core.processing import ProcessingResult
-from transcribe_doc.ingest.manifest_loader import speaker_hint_to_manifest
-from transcribe_doc.service import job_endpoints, model_endpoints
-from transcribe_doc.service import server as service_server
-from transcribe_doc.service.request_parsing import payload_from_multipart_form
-from transcribe_doc.service.responses import job_to_response
-from transcribe_doc.service.server import build_server, list_artifacts, list_events, list_jobs
-from transcribe_doc.storage.artifact_store import save_job
+from mnema.app.config import AppConfig, AppSection
+from mnema.app.models import ArtifactManifest, Job, JobStatus
+from mnema.core.batch import BatchItemResult, BatchResult
+from mnema.core.processing import ProcessingResult
+from mnema.ingest.manifest_loader import speaker_hint_to_manifest
+from mnema.service import job_endpoints, model_endpoints
+from mnema.service import server as service_server
+from mnema.service.request_parsing import payload_from_multipart_form
+from mnema.service.responses import job_to_response
+from mnema.service.server import build_server, list_artifacts, list_events, list_jobs
+from mnema.storage.artifact_store import save_job
 
 
 def test_list_jobs_and_artifacts_from_output_root(tmp_path: Path) -> None:

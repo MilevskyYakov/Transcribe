@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from transcribe_doc.storage.final_markdown import (
+from mnema.storage.final_markdown import (
     inspect_saved_final_markdown,
     safe_filename_stem,
     save_final_markdown,

@@ -5,14 +5,14 @@
 - Goal: measure speaker-turn attribution, false labels, and precision of a conservative `reliable_labels` / `transcript_without_labels` gate.
 - Run: 2026-08-11 on macOS Apple Silicon, local CPU only.
 - Config: `configs/lightweight_diarization.yaml` (`whisper/tiny`, Resemblyzer, automatic speaker count).
-- Runtime: Python 3.11.15, `transcribe-doc` 0.1.1, Resemblyzer 0.1.4, scikit-learn 1.9.0, openai-whisper 20250625, NumPy 2.4.6, Torch 2.13.0.
+- Runtime: Python 3.11.15, `mnema` 0.1.1, Resemblyzer 0.1.4, scikit-learn 1.9.0, openai-whisper 20250625, NumPy 2.4.6, Torch 2.13.0.
 - Fixture origin: synthetic macOS `say` voices already committed under `sample_data`; no user recordings. The JSON-only rapid-interruption case is in `tests/fixtures/diarization_probe.json`.
 
 Reproduce audio runs:
 
 ```bash
 for name in smoke_duo smoke_duo_rich smoke_duo_imbalanced smoke_duo_overlap; do
-  .venv/bin/python -m transcribe_doc.cli.main \
+  .venv/bin/python -m mnema.cli.main \
     --config configs/lightweight_diarization.yaml \
     run "sample_data/${name}.wav" \
     --speaker-manifest "sample_data/${name}_speakers.json" \

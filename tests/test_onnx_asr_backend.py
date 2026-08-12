@@ -3,8 +3,8 @@ import wave
 
 import pytest
 
-from transcribe_doc.app.exceptions import ExternalDependencyError
-from transcribe_doc.asr.onnx_asr_backend import OnnxAsrBackend
+from mnema.app.exceptions import ExternalDependencyError
+from mnema.asr.onnx_asr_backend import OnnxAsrBackend
 
 
 class FakeOnnxModel:
@@ -66,11 +66,11 @@ def test_onnx_backend_splits_long_wav_before_recognition(tmp_path: Path) -> None
 
 def test_onnx_backend_retries_coreml_failure_on_cpu(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(
-        "transcribe_doc.asr.onnx_asr_backend.ensure_external_model_ready",
+        "mnema.asr.onnx_asr_backend.ensure_external_model_ready",
         lambda model_name: None,
     )
     monkeypatch.setattr(
-        "transcribe_doc.asr.onnx_asr_backend.external_model_runtime_path",
+        "mnema.asr.onnx_asr_backend.external_model_runtime_path",
         lambda model_name: tmp_path / model_name,
     )
 
@@ -107,11 +107,11 @@ def test_onnx_backend_retries_coreml_failure_on_cpu(tmp_path: Path, monkeypatch)
 
 def test_onnx_backend_retries_coreml_load_failure_on_cpu(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(
-        "transcribe_doc.asr.onnx_asr_backend.ensure_external_model_ready",
+        "mnema.asr.onnx_asr_backend.ensure_external_model_ready",
         lambda model_name: None,
     )
     monkeypatch.setattr(
-        "transcribe_doc.asr.onnx_asr_backend.external_model_runtime_path",
+        "mnema.asr.onnx_asr_backend.external_model_runtime_path",
         lambda model_name: tmp_path / model_name,
     )
     calls = []
@@ -137,11 +137,11 @@ def test_onnx_backend_retries_coreml_load_failure_on_cpu(tmp_path: Path, monkeyp
 
 def test_parakeet_loads_with_cpu_provider_first(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(
-        "transcribe_doc.asr.onnx_asr_backend.ensure_external_model_ready",
+        "mnema.asr.onnx_asr_backend.ensure_external_model_ready",
         lambda model_name: None,
     )
     monkeypatch.setattr(
-        "transcribe_doc.asr.onnx_asr_backend.external_model_runtime_path",
+        "mnema.asr.onnx_asr_backend.external_model_runtime_path",
         lambda model_name: tmp_path / model_name,
     )
     calls = []
@@ -169,11 +169,11 @@ def test_parakeet_loads_with_cpu_provider_first(tmp_path: Path, monkeypatch) -> 
 
 def test_onnx_backend_retries_model_path_load_failure_on_cpu(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(
-        "transcribe_doc.asr.onnx_asr_backend.ensure_external_model_ready",
+        "mnema.asr.onnx_asr_backend.ensure_external_model_ready",
         lambda model_name: None,
     )
     monkeypatch.setattr(
-        "transcribe_doc.asr.onnx_asr_backend.external_model_runtime_path",
+        "mnema.asr.onnx_asr_backend.external_model_runtime_path",
         lambda model_name: tmp_path / model_name,
     )
     calls = []
@@ -199,11 +199,11 @@ def test_onnx_backend_retries_model_path_load_failure_on_cpu(tmp_path: Path, mon
 
 def test_onnx_backend_raises_short_error_when_cpu_retry_fails(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(
-        "transcribe_doc.asr.onnx_asr_backend.ensure_external_model_ready",
+        "mnema.asr.onnx_asr_backend.ensure_external_model_ready",
         lambda model_name: None,
     )
     monkeypatch.setattr(
-        "transcribe_doc.asr.onnx_asr_backend.external_model_runtime_path",
+        "mnema.asr.onnx_asr_backend.external_model_runtime_path",
         lambda model_name: tmp_path / model_name,
     )
 

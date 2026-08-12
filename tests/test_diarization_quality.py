@@ -1,5 +1,5 @@
-from transcribe_doc.app.models import SpeakerMapping, TranscriptSegment
-from transcribe_doc.diarization.quality import (
+from mnema.app.models import SpeakerMapping, TranscriptSegment
+from mnema.diarization.quality import (
     build_diarization_confidence,
     collect_diarization_quality_summary,
 )

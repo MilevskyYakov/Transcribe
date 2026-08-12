@@ -23,7 +23,7 @@ What should the app do instead?
 
 - macOS version:
 - Apple Silicon model:
-- Transcribe Doc version:
+- Mnema version:
 
 ## Privacy check
 

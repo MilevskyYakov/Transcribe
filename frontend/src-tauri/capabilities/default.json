@@ -13,7 +13,7 @@
       "identifier": "shell:allow-spawn",
       "allow": [
         {
-          "name": "binaries/transcribe-doc-backend",
+          "name": "binaries/mnema-backend",
           "sidecar": true
         }
       ]

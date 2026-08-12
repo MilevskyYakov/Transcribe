@@ -2,9 +2,9 @@ import json
 import zipfile
 from pathlib import Path
 
-from transcribe_doc.app.models import SpeakerMapping, TranscriptSegment, WordToken
-from transcribe_doc.export.writers import export_all, write_final_text_md, write_srt
-from transcribe_doc.summary.extractive import write_summary
+from mnema.app.models import SpeakerMapping, TranscriptSegment, WordToken
+from mnema.export.writers import export_all, write_final_text_md, write_srt
+from mnema.summary.extractive import write_summary
 
 
 def test_export_all_writes_user_formats(tmp_path: Path) -> None:

@@ -1,10 +1,10 @@
 import json
 from pathlib import Path
 
-from transcribe_doc.app.config import AppConfig, ExportSection, SummarySection
-from transcribe_doc.app.models import SpeakerMapping, TranscriptSegment
-from transcribe_doc.asr.base import AsrBackend, AsrTranscription
-from transcribe_doc.core import processing
+from mnema.app.config import AppConfig, ExportSection, SummarySection
+from mnema.app.models import SpeakerMapping, TranscriptSegment
+from mnema.asr.base import AsrBackend, AsrTranscription
+from mnema.core import processing
 
 
 class FakeAsrBackend(AsrBackend):

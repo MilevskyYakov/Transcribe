@@ -1,4 +1,4 @@
-from transcribe_doc.app.exceptions import ExternalDependencyError
+from mnema.app.exceptions import ExternalDependencyError
 
 from support.run_command import RunCommandHarness, transcript_segment, word_token
 

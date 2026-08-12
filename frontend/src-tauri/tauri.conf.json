@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "Transcribe Doc",
+  "productName": "Mnema",
   "version": "0.1.1",
-  "identifier": "local.transcribe-doc",
+  "identifier": "local.mnema",
   "build": {
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Transcribe Doc",
+        "title": "Mnema",
         "width": 1280,
         "height": 820,
         "minWidth": 980,
@@ -28,7 +28,7 @@
     "targets": ["app"],
     "createUpdaterArtifacts": true,
     "externalBin": [
-      "binaries/transcribe-doc-backend",
+      "binaries/mnema-backend",
       "binaries/ffmpeg",
       "binaries/ffprobe"
     ],

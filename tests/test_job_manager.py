@@ -1,10 +1,10 @@
 import json
 from pathlib import Path
 
-from transcribe_doc.app.config import load_config
-from transcribe_doc.app.models import JobStatus
-from transcribe_doc.core.job_manager import create_job
-from transcribe_doc.storage.filenames import safe_markdown_filename
+from mnema.app.config import load_config
+from mnema.app.models import JobStatus
+from mnema.core.job_manager import create_job
+from mnema.storage.filenames import safe_markdown_filename
 
 
 def test_create_job_initializes_workspace_and_snapshot(tmp_path: Path) -> None:

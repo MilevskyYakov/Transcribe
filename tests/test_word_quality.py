@@ -1,5 +1,5 @@
-from transcribe_doc.app.models import TranscriptSegment, WordToken
-from transcribe_doc.postprocess.word_quality import apply_word_quality_checks
+from mnema.app.models import TranscriptSegment, WordToken
+from mnema.postprocess.word_quality import apply_word_quality_checks
 
 
 def test_word_quality_marks_repeats_domain_terms_and_suspicious_words() -> None:

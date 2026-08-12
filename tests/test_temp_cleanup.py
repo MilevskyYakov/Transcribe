@@ -3,7 +3,7 @@ import os
 import time
 from pathlib import Path
 
-from transcribe_doc.storage.temp_cleanup import (
+from mnema.storage.temp_cleanup import (
     cleanup_stale_temporary_media,
     cleanup_successful_job_media,
 )

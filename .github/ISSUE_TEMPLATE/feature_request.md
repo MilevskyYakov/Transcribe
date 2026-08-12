@@ -7,7 +7,7 @@ labels: enhancement
 
 ## User problem
 
-What are you trying to do with Transcribe Doc?
+What are you trying to do with Mnema?
 
 ## Proposed behavior
 

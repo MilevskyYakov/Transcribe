@@ -1,7 +1,7 @@
 import hashlib
 from pathlib import Path
 
-from transcribe_doc.asr import external_model_cache, model_registry, model_status, whisper_cache
+from mnema.asr import external_model_cache, model_registry, model_status, whisper_cache
 
 
 def test_inspect_whisper_model_reports_missing(tmp_path: Path, monkeypatch) -> None:
@@ -49,7 +49,7 @@ def test_inspect_whisper_model_reports_ready(tmp_path: Path, monkeypatch) -> Non
 
 def test_desktop_model_dir_overrides_disposable_cache(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "app-data" / "cache"))
-    monkeypatch.setenv("TRANSCRIBE_DOC_MODEL_DIR", str(tmp_path / "app-data" / "models"))
+    monkeypatch.setenv("MNEMA_MODEL_DIR", str(tmp_path / "app-data" / "models"))
 
     assert model_status.whisper_cache_dir() == tmp_path / "app-data" / "models" / "whisper"
     assert (
@@ -62,7 +62,7 @@ def test_inspect_whisper_model_migrates_valid_legacy_cache(tmp_path: Path, monke
     payload = b"model"
     digest = hashlib.sha256(payload).hexdigest()
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "app-data" / "cache"))
-    monkeypatch.setenv("TRANSCRIBE_DOC_MODEL_DIR", str(tmp_path / "app-data" / "models"))
+    monkeypatch.setenv("MNEMA_MODEL_DIR", str(tmp_path / "app-data" / "models"))
     monkeypatch.setattr(
         whisper_cache, "model_url_for", lambda name: f"https://example.test/{digest}/{name}.pt"
     )
@@ -81,7 +81,7 @@ def test_inspect_whisper_model_migrates_valid_legacy_cache(tmp_path: Path, monke
 
 def test_inspect_whisper_model_reports_corrupt_legacy_cache(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "app-data" / "cache"))
-    monkeypatch.setenv("TRANSCRIBE_DOC_MODEL_DIR", str(tmp_path / "app-data" / "models"))
+    monkeypatch.setenv("MNEMA_MODEL_DIR", str(tmp_path / "app-data" / "models"))
     monkeypatch.setattr(
         whisper_cache, "model_url_for", lambda name: f"https://example.test/{'a' * 64}/{name}.pt"
     )
@@ -138,7 +138,7 @@ def test_inspect_external_model_prefers_ready_files_over_stale_error(
 ) -> None:
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
     external_model_cache.mark_model_download_error("parakeet-v3", "old CoreML failure")
-    runtime_dir = tmp_path / "cache" / "transcribe-doc" / "models" / "parakeet-v3"
+    runtime_dir = tmp_path / "cache" / "mnema" / "models" / "parakeet-v3"
     runtime_dir.mkdir(parents=True)
     (runtime_dir / "config.json").write_text("{}", encoding="utf-8")
     (runtime_dir / "encoder-model.onnx").write_bytes(b"onnx")
@@ -151,7 +151,7 @@ def test_inspect_external_model_prefers_ready_files_over_stale_error(
 
 def test_inspect_external_model_migrates_valid_legacy_runtime(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "app-data" / "cache"))
-    monkeypatch.setenv("TRANSCRIBE_DOC_MODEL_DIR", str(tmp_path / "app-data" / "models"))
+    monkeypatch.setenv("MNEMA_MODEL_DIR", str(tmp_path / "app-data" / "models"))
     legacy_runtime = tmp_path / "app-data" / "cache" / "transcribe-doc" / "models" / "parakeet-v3"
     legacy_runtime.mkdir(parents=True)
     (legacy_runtime / "config.json").write_text("{}", encoding="utf-8")
@@ -166,10 +166,17 @@ def test_inspect_external_model_migrates_valid_legacy_runtime(tmp_path: Path, mo
     assert (legacy_runtime / "config.json").exists()
 
 
+def test_legacy_model_dir_environment_is_still_accepted(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("MNEMA_MODEL_DIR", raising=False)
+    monkeypatch.setenv("TRANSCRIBE_DOC_MODEL_DIR", str(tmp_path / "legacy-models"))
+
+    assert model_status.model_root_dir() == tmp_path / "legacy-models"
+
+
 def test_inspect_external_model_reports_incomplete_runtime_as_corrupt(
     tmp_path: Path, monkeypatch
 ) -> None:
-    monkeypatch.setenv("TRANSCRIBE_DOC_MODEL_DIR", str(tmp_path / "app-data" / "models"))
+    monkeypatch.setenv("MNEMA_MODEL_DIR", str(tmp_path / "app-data" / "models"))
     runtime_dir = tmp_path / "app-data" / "models" / "external" / "parakeet-v3"
     runtime_dir.mkdir(parents=True)
     (runtime_dir / "config.json").write_text("{}", encoding="utf-8")
@@ -201,7 +208,7 @@ def test_download_external_model_uses_app_cache_directory(tmp_path: Path, monkey
     assert calls == [
         (
             "nemo-parakeet-tdt-0.6b-v3",
-            tmp_path / "cache" / "transcribe-doc" / "models" / "parakeet-v3",
+            tmp_path / "cache" / "mnema" / "models" / "parakeet-v3",
             ["CPUExecutionProvider"],
         )
     ]
@@ -210,7 +217,7 @@ def test_download_external_model_uses_app_cache_directory(tmp_path: Path, monkey
 
 def test_download_external_model_clears_incomplete_runtime_dir(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
-    runtime_dir = tmp_path / "cache" / "transcribe-doc" / "models" / "parakeet-v3"
+    runtime_dir = tmp_path / "cache" / "mnema" / "models" / "parakeet-v3"
     runtime_dir.mkdir(parents=True)
     (runtime_dir / "config.json").write_text("{}", encoding="utf-8")
     calls = []
@@ -234,7 +241,7 @@ def test_download_external_model_clears_incomplete_runtime_dir(tmp_path: Path, m
 
 def test_external_download_progress_counts_partial_files(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
-    runtime_dir = tmp_path / "cache" / "transcribe-doc" / "models" / "parakeet-v3"
+    runtime_dir = tmp_path / "cache" / "mnema" / "models" / "parakeet-v3"
     runtime_dir.mkdir(parents=True)
     (runtime_dir / "encoder-model.onnx").write_bytes(b"12345")
     partial_dir = runtime_dir / ".cache" / "huggingface" / "download"

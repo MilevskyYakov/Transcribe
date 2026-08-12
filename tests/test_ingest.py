@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from transcribe_doc.ingest.input_resolver import InputResolutionError, resolve_single_input
-from transcribe_doc.storage.paths import build_job_paths
+from mnema.ingest.input_resolver import InputResolutionError, resolve_single_input
+from mnema.storage.paths import build_job_paths
 
 
 def test_resolve_single_input_accepts_supported_media(tmp_path: Path) -> None:

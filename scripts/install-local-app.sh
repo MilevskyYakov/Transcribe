@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_NAME="Transcribe Doc"
+APP_NAME="Mnema"
 APP_BUNDLE_NAME="$APP_NAME.app"
 DEFAULT_INSTALL_DIR="/Applications"
 BUNDLE_RELATIVE_PATH="frontend/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/$APP_BUNDLE_NAME"
@@ -13,7 +13,7 @@ build_app=true
 open_after_install=true
 quit_running=false
 install_dir="$DEFAULT_INSTALL_DIR"
-tmp_parent="$(mktemp -d "${TMPDIR:-/tmp}/transcribe-doc-install.XXXXXX")"
+tmp_parent="$(mktemp -d "${TMPDIR:-/tmp}/mnema-install.XXXXXX")"
 original_tauri_conf=""
 local_signing_key=""
 local_signing_password=""
@@ -35,7 +35,7 @@ Build and install the local macOS Tauri app bundle.
 Options:
   --no-build         Install an already built app bundle without running package:mac.
   --no-open          Do not open the app after installation.
-  --quit-running     Quit a running Transcribe Doc app before replacing it.
+  --quit-running     Quit a running Mnema app before replacing it.
   --install-dir DIR  Install into DIR instead of /Applications.
   -h, --help         Show this help.
 EOF
@@ -119,7 +119,7 @@ PY
 }
 
 is_app_running() {
-  pgrep -x "$APP_NAME" >/dev/null 2>&1 || pgrep -x "transcribe-doc" >/dev/null 2>&1
+  pgrep -x "$APP_NAME" >/dev/null 2>&1 || pgrep -x "mnema" >/dev/null 2>&1 || pgrep -x "Transcribe Doc" >/dev/null 2>&1
 }
 
 quit_app() {
@@ -146,7 +146,7 @@ stop_orphaned_backends() {
       echo "Stopping orphaned backend process $pid..."
       kill "$pid" >/dev/null 2>&1 || true
     fi
-  done < <(pgrep -f 'transcribe_doc\.cli\.main.*--app-data-dir .*local\.transcribe-doc' || true)
+  done < <(pgrep -f '(mnema|transcribe_doc)\.cli\.main.*--app-data-dir .*local\.(mnema|transcribe-doc)' || true)
 }
 
 while [ "$#" -gt 0 ]; do

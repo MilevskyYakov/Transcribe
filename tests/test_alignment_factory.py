@@ -1,6 +1,6 @@
-from transcribe_doc.app.config import AlignmentSection, AppConfig
-from transcribe_doc.alignment.factory import build_alignment_backend
-from transcribe_doc.alignment.passthrough_backend import PassthroughAlignmentBackend
+from mnema.app.config import AlignmentSection, AppConfig
+from mnema.alignment.factory import build_alignment_backend
+from mnema.alignment.passthrough_backend import PassthroughAlignmentBackend
 
 
 def test_build_alignment_backend_returns_passthrough_backend_when_enabled() -> None:

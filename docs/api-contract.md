@@ -1,6 +1,6 @@
 # Local API Contract
 
-The canonical app/backend contract for the local desktop API is defined in `src/transcribe_doc/service/contracts.py` and mirrored by `frontend/src/types.ts`.
+The canonical app/backend contract for the local desktop API is defined in `src/mnema/service/contracts.py` and mirrored by `frontend/src/types.ts`.
 
 Backend route handlers should return payloads by constructing the dataclass responses from `contracts.py` and serializing them with `dataclass_payload()` (or `JobResponse.to_payload()` for jobs). Do not assemble new endpoint-specific dictionaries directly in route handlers when a response model already exists.
 
@@ -75,7 +75,7 @@ Each model has `name`, `status`, and optional metadata such as `label`, `backend
 
 When adding or changing an app-facing field:
 
-1. Update `src/transcribe_doc/service/contracts.py`.
+1. Update `src/mnema/service/contracts.py`.
 2. Update `frontend/src/types.ts` to mirror the contract.
 3. Add or update `tests/test_service_api.py` contract coverage.
 4. Run `pytest tests/test_service_api.py` and `npm test` in `frontend/`.
