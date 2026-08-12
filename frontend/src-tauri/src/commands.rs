@@ -2,7 +2,10 @@ use crate::{
     backend::{binary_path, AppBootstrap, BackendLifecycleSnapshot, BackendState},
     settings::{save_settings, AppSettings},
 };
-use std::path::Path;
+use std::{
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 #[tauri::command]
 pub(crate) fn app_bootstrap(state: tauri::State<'_, BackendState>) -> AppBootstrap {
@@ -42,6 +45,47 @@ pub(crate) fn backend_status(state: tauri::State<'_, BackendState>) -> BackendLi
 #[tauri::command]
 pub(crate) fn is_regular_file_path(path: String) -> bool {
     Path::new(&path).is_file()
+}
+
+#[tauri::command]
+pub(crate) fn open_saved_markdown(path: String) -> Result<(), String> {
+    run_macos_open(&existing_file(&path)?, false)
+}
+
+#[tauri::command]
+pub(crate) fn reveal_saved_markdown(path: String) -> Result<(), String> {
+    run_macos_open(&existing_file(&path)?, true)
+}
+
+fn existing_file(path: &str) -> Result<PathBuf, String> {
+    let path = Path::new(path);
+    if !path.is_file() {
+        return Err("Markdown file does not exist".to_string());
+    }
+    path.canonicalize()
+        .map_err(|error| format!("Failed to resolve Markdown path: {error}"))
+}
+
+#[cfg(target_os = "macos")]
+fn run_macos_open(path: &Path, reveal: bool) -> Result<(), String> {
+    let mut command = Command::new("/usr/bin/open");
+    if reveal {
+        command.arg("-R");
+    }
+    let status = command
+        .arg(path)
+        .status()
+        .map_err(|error| format!("Failed to launch macOS open command: {error}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("macOS open command failed with status {status}"))
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn run_macos_open(_path: &Path, _reveal: bool) -> Result<(), String> {
+    Err("Opening saved Markdown is supported only on macOS".to_string())
 }
 
 #[tauri::command]
@@ -125,4 +169,26 @@ pub(crate) fn set_autosave_markdown_dir(
         *current = normalized.clone();
     }
     Ok(normalized)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::existing_file;
+    use std::fs;
+
+    #[test]
+    fn existing_file_accepts_files_and_rejects_missing_paths() {
+        let path = std::env::temp_dir().join(format!("mnema-markdown-{}.md", std::process::id()));
+        fs::write(&path, "# Mnema").unwrap();
+
+        assert_eq!(
+            existing_file(path.to_str().unwrap()).unwrap(),
+            path.canonicalize().unwrap()
+        );
+        fs::remove_file(&path).unwrap();
+        assert_eq!(
+            existing_file(path.to_str().unwrap()).unwrap_err(),
+            "Markdown file does not exist"
+        );
+    }
 }
