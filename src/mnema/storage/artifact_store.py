@@ -7,6 +7,7 @@ from dataclasses import asdict, is_dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Any, TypeGuard, cast
+from uuid import uuid4
 
 from mnema.app.config import AppConfig
 from mnema.app.models import Job, TranscriptSegment
@@ -62,10 +63,12 @@ def save_words(segments: list[TranscriptSegment], destination: Path) -> None:
 
 def _write_json(destination: Path, payload: Any) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(
+    temporary = destination.with_suffix(f".{uuid4().hex}.tmp")
+    temporary.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+    temporary.replace(destination)
 
 
 def _normalize(value: Any) -> Any:

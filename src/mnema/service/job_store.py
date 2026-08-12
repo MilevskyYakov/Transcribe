@@ -6,6 +6,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from mnema.app.models import JobStatus
 
@@ -80,7 +81,9 @@ def metadata_value(payload: JsonObject, key: str, fallback: Any) -> Any:
 
 
 def write_job_payload(job_json: Path, payload: JsonObject) -> None:
-    job_json.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    temporary = job_json.with_suffix(f".{uuid4().hex}.tmp")
+    temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    temporary.replace(job_json)
 
 
 def write_failed_job_payload(

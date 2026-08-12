@@ -12,7 +12,12 @@ from mnema.service.batch_session_store import (
     reconcile_batch_session_jobs,
     write_batch_session,
 )
-from mnema.service.job_store import load_job, mark_interrupted_jobs, write_job_payload
+from mnema.service.job_store import (
+    load_job,
+    mark_interrupted_jobs,
+    read_json_file,
+    write_job_payload,
+)
 
 
 class RecordingExecutor:
@@ -244,6 +249,21 @@ def test_failed_item_retry_creates_one_new_attempt_without_touching_ready_item(
     assert restored["items"][0]["attempt_job_ids"] == [job_ids[0], restored["items"][0]["job_id"]]
     assert restored["items"][1]["job_id"] == job_ids[1]
     assert restored["items"][1]["status"] == "ready"
+
+
+def test_job_payload_write_never_exposes_partial_json(tmp_path: Path, monkeypatch) -> None:
+    job_json = tmp_path / "job.json"
+    job_json.write_text('{"status": "queued"}', encoding="utf-8")
+    original_replace = Path.replace
+
+    def inspect_before_replace(source: Path, destination: Path) -> Path:
+        assert read_json_file(destination, None) == {"status": "queued"}
+        return original_replace(source, destination)
+
+    monkeypatch.setattr(Path, "replace", inspect_before_replace)
+    write_job_payload(job_json, {"status": "completed"})
+
+    assert read_json_file(job_json, None) == {"status": "completed"}
 
 
 def test_restart_marks_only_active_batch_job_failed_and_restores_queue(tmp_path: Path) -> None:

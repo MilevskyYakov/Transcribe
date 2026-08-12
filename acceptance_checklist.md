@@ -184,6 +184,21 @@
 - [x] Локальный `npm run tauri:build` собирает `.app`
 - [ ] Bundle smoke подтверждён на чистой машине
 
+## R. Mnema release candidate 0.1.1 (2026-08-12)
+
+- [x] `Mnema.app`, `local.mnema`, `mnema` и `mnema-backend` используются как active identifiers
+- [x] Upgrade fixture сохраняет history, settings, default/output folders и models из `local.transcribe-doc`
+- [x] Packaged app запускает embedded backend, видит bundled ffmpeg/ffprobe и открывает New screen
+- [x] Single job проходит processing/result и сохраняет Markdown в выбранную папку
+- [x] Batch из 3 файлов изолирует failure; retry создаёт новый attempt только failed item
+- [x] Batch/history/job state переживают restart через durable API storage
+- [x] Unreliable diarization скрывает ложные labels; reliable result допускает review
+- [x] Notifications покрыты focus/dedupe/aggregation tests; permission denied не блокирует processing
+- [ ] Updater проверен с production signing key и опубликованным release feed
+- [ ] Полный clean-machine smoke выполнен вне developer Mac
+
+Версионированный factual evidence: `docs/mnema-0.1.1-integration-checklist.md`.
+
 ## Exit criteria
 
 MVP можно считать принятым, если:
