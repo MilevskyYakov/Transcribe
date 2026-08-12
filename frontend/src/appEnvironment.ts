@@ -169,16 +169,14 @@ export async function isRegularFilePath(path: string, isTauri: boolean): Promise
 
 export async function openSavedMarkdownPath(path: string, isTauri: boolean): Promise<void> {
   if (!isTauri) return;
-  const { open } = await import("@tauri-apps/plugin-shell");
-  await open(path);
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("open_saved_markdown", { path });
 }
 
 export async function revealSavedMarkdownPath(path: string, isTauri: boolean): Promise<void> {
   if (!isTauri) return;
-  const separator = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
-  const directory = separator > 0 ? path.slice(0, separator) : path;
-  const { open } = await import("@tauri-apps/plugin-shell");
-  await open(directory);
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("reveal_saved_markdown", { path });
 }
 
 function normalizeBridgeValue(value: string | null | undefined, fallback: string): string {

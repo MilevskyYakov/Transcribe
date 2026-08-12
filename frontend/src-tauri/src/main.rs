@@ -22,6 +22,8 @@ fn main() {
             commands::app_bootstrap,
             commands::backend_status,
             commands::is_regular_file_path,
+            commands::open_saved_markdown,
+            commands::reveal_saved_markdown,
             commands::mark_backend_offline,
             commands::mark_backend_online,
             commands::restart_backend,
