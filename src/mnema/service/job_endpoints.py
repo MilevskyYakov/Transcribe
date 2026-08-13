@@ -176,6 +176,8 @@ def _submit_batch_session_item_endpoint(ctx: Any, session_id: str, item_id: str)
             "batch_session_id": session_id,
             "batch_item_id": item_id,
         }
+        if request.get("source_filename"):
+            initial_metadata["source_filename"] = request["source_filename"]
         job, _ = create_job(
             source_path=resolved_input.path,
             output_root=ctx.output_root,
@@ -388,9 +390,11 @@ def create_job_endpoint(ctx: Any) -> ApiResponse:
             if isinstance(raw_final_markdown_dir, str) and raw_final_markdown_dir.strip()
             else None
         )
-        initial_metadata: dict[str, object] | None = (
-            {"final_markdown_dir": final_markdown_dir} if final_markdown_dir else None
-        )
+        initial_metadata: dict[str, object] = {}
+        if final_markdown_dir:
+            initial_metadata["final_markdown_dir"] = final_markdown_dir
+        if payload.get("source_filename"):
+            initial_metadata["source_filename"] = payload["source_filename"]
         job, _ = create_job(
             source_path=resolved_input.path,
             output_root=output_root,
@@ -411,6 +415,7 @@ def create_job_endpoint(ctx: Any) -> ApiResponse:
             speaker_hint=payload.get("speaker_hint"),
             formats=payload.get("formats"),
             final_markdown_dir=final_markdown_dir,
+            initial_metadata=initial_metadata or None,
         )
     except InputResolutionError as error:
         return json_response({"error": str(error)}, HTTPStatus.UNPROCESSABLE_ENTITY)

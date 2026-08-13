@@ -6,7 +6,8 @@ import json
 import shutil
 import warnings
 from pathlib import Path
-from typing import Any, IO, Protocol, cast
+from typing import IO, Any, Protocol, cast
+from uuid import uuid4
 
 from .types import JsonObject
 
@@ -55,12 +56,15 @@ def payload_from_multipart_form(form: Any, upload_root: Path) -> JsonObject:
     if media_item is None or not getattr(media_item, "filename", None):
         raise ValueError("multipart field 'media' is required.")
 
-    upload_root.mkdir(parents=True, exist_ok=True)
-    media_path = upload_root / Path(media_item.filename).name
-    with media_path.open("wb") as handle:
-        shutil.copyfileobj(media_item.file, handle)
+    request_root = upload_root / uuid4().hex
+    request_root.mkdir(parents=True)
+    source_filename = Path(media_item.filename).name
+    media_path = _store_upload(media_item, request_root, f"media{Path(source_filename).suffix}")
 
-    payload: JsonObject = {"input_path": str(media_path)}
+    payload: JsonObject = {
+        "input_path": str(media_path),
+        "source_filename": source_filename,
+    }
     for field_name, payload_key in [
         ("speaker_hint", "speaker_hint"),
         ("asr_backend", "asr_backend"),
@@ -71,17 +75,30 @@ def payload_from_multipart_form(form: Any, upload_root: Path) -> JsonObject:
         if value:
             payload[payload_key] = value
 
-    display_title = field_value(form, "display_title") or field_value(form, "title")
-    if display_title:
-        payload["display_title"] = display_title
+    payload["display_title"] = (
+        field_value(form, "display_title")
+        or field_value(form, "title")
+        or Path(source_filename).stem
+    )
 
     speaker_item = form["speaker_manifest"] if "speaker_manifest" in form else None
     if speaker_item is not None and getattr(speaker_item, "filename", None):
-        speaker_path = upload_root / Path(speaker_item.filename).name
-        with speaker_path.open("wb") as handle:
-            shutil.copyfileobj(speaker_item.file, handle)
+        speaker_path = _store_upload(
+            speaker_item,
+            request_root,
+            f"speaker_manifest{Path(speaker_item.filename).suffix}",
+        )
         payload["speaker_manifest_path"] = str(speaker_path)
     return payload
+
+
+def _store_upload(item: Any, request_root: Path, storage_name: str) -> Path:
+    path = request_root / storage_name
+    partial_path = path.with_name(f".{path.name}.part")
+    with partial_path.open("wb") as handle:
+        shutil.copyfileobj(item.file, handle)
+    partial_path.replace(path)
+    return path
 
 
 def field_value(form: Any, name: str) -> str | None:
