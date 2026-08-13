@@ -130,7 +130,6 @@ export function App() {
   );
   const [appEnvironment, setAppEnvironment] = useState<AppEnvironment | null>(null);
   const [backendLifecycle, setBackendLifecycle] = useState<BackendLifecycle | null>(null);
-  const [, setBackendHealthFailures] = useState(0);
   const [health, setHealth] = useState<"unknown" | "ok" | "down">("unknown");
   const [healthDetails, setHealthDetails] = useState<HealthPayload | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -217,7 +216,6 @@ export function App() {
       const nextHealth = await client.health();
       setHealth("ok");
       setHealthDetails(nextHealth);
-      setBackendHealthFailures(0);
       const onlineLifecycle = await markBackendOnline(isManagedApp);
       if (onlineLifecycle) setBackendLifecycle(onlineLifecycle);
       const [nextJobs, nextModels, nextBatchSessions] = await Promise.all([
@@ -243,18 +241,6 @@ export function App() {
       const offlineLifecycle = await markBackendOffline(isManagedApp, message);
       if (offlineLifecycle) {
         setBackendLifecycle(offlineLifecycle);
-        setBackendHealthFailures((current) => {
-          const next = current + 1;
-          if (isManagedApp && next >= 3) {
-            setBackendLifecycle({
-              ...offlineLifecycle,
-              state: "error",
-              human_message: "Не удалось запустить",
-              technical_detail: message
-            });
-          }
-          return next;
-        });
       }
       setNotice(message);
     }
@@ -331,11 +317,7 @@ export function App() {
       void loadBackendStatus(true)
         .then((status) => {
           if (status) {
-            setBackendLifecycle((current) =>
-              current?.state === "error" && status.state !== "online" && status.state !== "restarting"
-                ? current
-                : status
-            );
+            setBackendLifecycle(status);
           }
         })
         .catch(() => undefined);
@@ -675,7 +657,6 @@ export function App() {
 
   async function retryBackendStart() {
     setNotice(null);
-    setBackendHealthFailures(0);
     const restarting = await restartBackend(isManagedApp);
     if (restarting) {
       setBackendLifecycle(restarting);

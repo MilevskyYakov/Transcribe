@@ -106,11 +106,8 @@ pub(crate) fn mark_backend_offline(
 }
 
 #[tauri::command]
-pub(crate) fn restart_backend<R: tauri::Runtime>(
-    app: tauri::AppHandle<R>,
-    state: tauri::State<'_, BackendState>,
-) -> BackendLifecycleSnapshot {
-    state.restart(&app)
+pub(crate) fn restart_backend(state: tauri::State<'_, BackendState>) -> BackendLifecycleSnapshot {
+    state.restart()
 }
 
 #[tauri::command]
