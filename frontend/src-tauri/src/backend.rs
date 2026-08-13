@@ -1,4 +1,4 @@
-use crate::settings::load_settings;
+use crate::settings::{load_settings, AppSettings};
 use serde::Serialize;
 use std::{
     fs,
@@ -55,8 +55,7 @@ pub(crate) struct BackendState {
     pub(crate) output_dir: PathBuf,
     pub(crate) media_bin_dir: PathBuf,
     pub(crate) settings_path: PathBuf,
-    pub(crate) default_model_name: Mutex<String>,
-    pub(crate) autosave_markdown_dir: Mutex<Option<String>>,
+    pub(crate) settings: Mutex<AppSettings>,
     config_path: PathBuf,
     sidecar_path: PathBuf,
     runtime: Arc<Mutex<BackendRuntime>>,
@@ -318,7 +317,7 @@ pub(crate) fn start_backend<R: Runtime>(
     fs::create_dir_all(app_data_dir.join("tmp"))?;
     fs::create_dir_all(&cache_dir)?;
     fs::create_dir_all(&model_dir)?;
-    let settings = load_settings(&settings_path);
+    let settings = load_settings(&settings_path)?;
 
     let resource_dir = bundled_resource_dir_from_exe().unwrap_or_else(dev_resource_dir);
     let config_path = resource_file(&resource_dir, "configs/default.yaml");
@@ -339,8 +338,7 @@ pub(crate) fn start_backend<R: Runtime>(
         output_dir,
         media_bin_dir,
         settings_path,
-        default_model_name: Mutex::new(settings.default_model_name),
-        autosave_markdown_dir: Mutex::new(settings.autosave_markdown_dir),
+        settings: Mutex::new(settings),
         config_path,
         sidecar_path: backend_sidecar_path(),
         runtime: Arc::new(Mutex::new(BackendRuntime {
@@ -453,6 +451,7 @@ mod tests {
     use super::{
         copy_missing_tree, lifecycle_snapshot, BackendRuntime, BackendState, PROCESS_POLL_INTERVAL,
     };
+    use crate::settings::AppSettings;
     use std::{
         fs,
         path::{Path, PathBuf},
@@ -558,8 +557,10 @@ mod tests {
             output_dir: root.join("output"),
             media_bin_dir: root.join("bin"),
             settings_path: root.join("settings.json"),
-            default_model_name: Mutex::new("tiny".to_string()),
-            autosave_markdown_dir: Mutex::new(None),
+            settings: Mutex::new(AppSettings {
+                default_model_name: "tiny".to_string(),
+                autosave_markdown_dir: None,
+            }),
             config_path: root.join("config.yaml"),
             sidecar_path,
             runtime: Arc::new(Mutex::new(BackendRuntime {

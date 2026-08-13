@@ -11,16 +11,11 @@ use std::{
 pub(crate) fn app_bootstrap(state: tauri::State<'_, BackendState>) -> AppBootstrap {
     let ffmpeg_path = binary_path(&state.media_bin_dir, "ffmpeg");
     let ffprobe_path = binary_path(&state.media_bin_dir, "ffprobe");
-    let default_model_name = state
-        .default_model_name
+    let settings = state
+        .settings
         .lock()
         .map(|value| value.clone())
-        .unwrap_or_else(|_| AppSettings::default().default_model_name);
-    let autosave_markdown_dir = state
-        .autosave_markdown_dir
-        .lock()
-        .ok()
-        .and_then(|value| value.clone());
+        .unwrap_or_default();
     AppBootstrap {
         api_base_url: state.api_base_url(),
         app_data_dir: state.app_data_dir.display().to_string(),
@@ -31,8 +26,8 @@ pub(crate) fn app_bootstrap(state: tauri::State<'_, BackendState>) -> AppBootstr
         ffprobe_available: ffprobe_path.is_some(),
         ffmpeg_path: ffmpeg_path.map(|path| path.display().to_string()),
         ffprobe_path: ffprobe_path.map(|path| path.display().to_string()),
-        default_model_name,
-        autosave_markdown_dir,
+        default_model_name: settings.default_model_name,
+        autosave_markdown_dir: settings.autosave_markdown_dir,
         backend_lifecycle: state.lifecycle(),
     }
 }
@@ -119,21 +114,10 @@ pub(crate) fn set_default_model(
     if model_name.is_empty() {
         return Err("Model name cannot be empty".to_string());
     }
-    save_settings(
-        &state.settings_path,
-        &AppSettings {
-            default_model_name: model_name.clone(),
-            autosave_markdown_dir: state
-                .autosave_markdown_dir
-                .lock()
-                .ok()
-                .and_then(|value| value.clone()),
-        },
-    )
+    update_settings(&state.settings, &state.settings_path, |settings| {
+        settings.default_model_name = model_name.clone();
+    })
     .map_err(|error| format!("Failed to save default model: {error}"))?;
-    if let Ok(mut current) = state.default_model_name.lock() {
-        *current = model_name.clone();
-    }
     Ok(model_name)
 }
 
@@ -150,28 +134,35 @@ pub(crate) fn set_autosave_markdown_dir(
             Some(trimmed)
         }
     });
-    save_settings(
-        &state.settings_path,
-        &AppSettings {
-            default_model_name: state
-                .default_model_name
-                .lock()
-                .map(|value| value.clone())
-                .unwrap_or_else(|_| AppSettings::default().default_model_name),
-            autosave_markdown_dir: normalized.clone(),
-        },
-    )
+    update_settings(&state.settings, &state.settings_path, |settings| {
+        settings.autosave_markdown_dir = normalized.clone();
+    })
     .map_err(|error| format!("Failed to save autosave folder: {error}"))?;
-    if let Ok(mut current) = state.autosave_markdown_dir.lock() {
-        *current = normalized.clone();
-    }
     Ok(normalized)
+}
+
+fn update_settings(
+    settings: &std::sync::Mutex<AppSettings>,
+    settings_path: &Path,
+    update: impl FnOnce(&mut AppSettings),
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut current = settings.lock().map_err(|_| "settings lock poisoned")?;
+    let mut changed = current.clone();
+    update(&mut changed);
+    save_settings(settings_path, &changed)?;
+    *current = changed;
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::existing_file;
-    use std::fs;
+    use super::{existing_file, update_settings};
+    use crate::settings::{load_settings, AppSettings};
+    use std::{
+        fs,
+        sync::{Arc, Mutex},
+        thread,
+    };
 
     #[test]
     fn existing_file_accepts_files_and_rejects_missing_paths() {
@@ -187,5 +178,48 @@ mod tests {
             existing_file(path.to_str().unwrap()).unwrap_err(),
             "Markdown file does not exist"
         );
+    }
+
+    #[test]
+    fn concurrent_setting_updates_preserve_both_values() {
+        let root = std::env::temp_dir().join(format!(
+            "mnema-command-settings-{}-{:?}",
+            std::process::id(),
+            thread::current().id()
+        ));
+        let path = Arc::new(root.join("settings.json"));
+        let settings = Arc::new(Mutex::new(AppSettings::default()));
+
+        let model_update = {
+            let path = Arc::clone(&path);
+            let settings = Arc::clone(&settings);
+            thread::spawn(move || {
+                update_settings(&settings, &path, |value| {
+                    value.default_model_name = "tiny".to_string();
+                })
+                .unwrap();
+            })
+        };
+        let folder_update = {
+            let path = Arc::clone(&path);
+            let settings = Arc::clone(&settings);
+            thread::spawn(move || {
+                update_settings(&settings, &path, |value| {
+                    value.autosave_markdown_dir = Some("/tmp/transcripts".to_string());
+                })
+                .unwrap();
+            })
+        };
+        model_update.join().unwrap();
+        folder_update.join().unwrap();
+
+        assert_eq!(
+            load_settings(&path).unwrap(),
+            AppSettings {
+                default_model_name: "tiny".to_string(),
+                autosave_markdown_dir: Some("/tmp/transcripts".to_string()),
+            }
+        );
+        fs::remove_dir_all(root).unwrap();
     }
 }
