@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import { ApiClient, normalizeBaseUrl } from "./api";
 import {
@@ -8,8 +8,6 @@ import {
   loadBackendStatus,
   loadWebAutosaveMarkdownDir,
   loadWebDefaultModel,
-  markBackendOffline,
-  markBackendOnline,
   openSavedMarkdownPath,
   revealSavedMarkdownPath,
   resolveAppEnvironment,
@@ -27,6 +25,12 @@ import {
   type PendingUpdate,
   type UpdateState
 } from "./appUpdates";
+import {
+  type MediaSelection,
+  useAppSnapshot,
+  useSelectedJobDetails,
+  useTranscriptionDraft
+} from "./appController";
 import {
   canChooseModelAsDefault,
   canSubmitTranscriptionJob,
@@ -58,27 +62,14 @@ import {
   UPLOAD_UNSUPPORTED_MEDIA_MESSAGE
 } from "./components/UploadPanel";
 import { formatBytes } from "./format";
-import { deliverTerminalNotifications, requestNotificationPermission } from "./notifications";
+import { requestNotificationPermission } from "./notifications";
 import type {
   AppEnvironment,
-  Artifact,
   BatchSession,
   BatchSessionItem,
   BackendLifecycle,
-  FinalMarkdownStatus,
-  HealthPayload,
   Job,
-  JobEvent,
-  ModelsPayload,
-  SpeakerReviewPayload,
-  TranscriptSegment
 } from "./types";
-
-interface MediaSelection {
-  file?: File;
-  name: string;
-  path?: string;
-}
 
 export function batchFilesMatch(items: BatchSessionItem[], files: File[]): boolean {
   const missingItems = items.filter((item) => !item.input_path && item.status === "configure");
@@ -130,42 +121,66 @@ export function App() {
   );
   const [appEnvironment, setAppEnvironment] = useState<AppEnvironment | null>(null);
   const [backendLifecycle, setBackendLifecycle] = useState<BackendLifecycle | null>(null);
-  const [health, setHealth] = useState<"unknown" | "ok" | "down">("unknown");
-  const [healthDetails, setHealthDetails] = useState<HealthPayload | null>(null);
-  const [jobs, setJobs] = useState<Job[]>([]);
-  const [batchSessions, setBatchSessions] = useState<BatchSession[]>([]);
   const [currentView, setCurrentView] = useState<AppView>("new");
   const [previousView, setPreviousView] = useState<AppView>("new");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [selectedBatchSessionId, setSelectedBatchSessionId] = useState<string | null>(null);
   const [selectedBatchItemId, setSelectedBatchItemId] = useState<string | null>(null);
-  const [segments, setSegments] = useState<TranscriptSegment[]>([]);
-  const [artifacts, setArtifacts] = useState<Artifact[]>([]);
-  const [events, setEvents] = useState<JobEvent[]>([]);
-  const [mediaSelection, setMediaSelection] = useState<MediaSelection | null>(null);
-  const [batchSelections, setBatchSelections] = useState<MediaSelection[]>([]);
-  const [jobOutputDirectory, setJobOutputDirectory] = useState<string | null>(null);
   const [isWorkspaceDragActive, setIsWorkspaceDragActive] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [transcriptionTitle, setTranscriptionTitle] = useState("");
   const [selectedModelName, setSelectedModelName] = useState(() => loadWebDefaultModel() ?? "large-v3");
   const [autosaveMarkdownDir, setAutosaveMarkdownDir] = useState(() => loadWebAutosaveMarkdownDir());
-  const [finalMarkdownStatus, setFinalMarkdownStatus] = useState<FinalMarkdownStatus | null>(null);
-  const [speakerReview, setSpeakerReview] = useState<SpeakerReviewPayload | null>(null);
   const [isSavingFinalMarkdown, setIsSavingFinalMarkdown] = useState(false);
   const [isModelsOpen, setIsModelsOpen] = useState(false);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
-  const [models, setModels] = useState<ModelsPayload | null>(null);
   const [updateState, setUpdateState] = useState<UpdateState>(initialUpdateState);
   const [pendingUpdate, setPendingUpdate] = useState<PendingUpdate | null>(null);
   const workspaceRef = useRef<HTMLElement | null>(null);
 
   const client = useMemo(() => new ApiClient(normalizeBaseUrl(apiBase)), [apiBase]);
+  const {
+    batchSelections,
+    jobOutputDirectory,
+    mediaSelection,
+    setBatchSelections,
+    setJobOutputDirectory,
+    setMediaSelection,
+    setTranscriptionTitle,
+    setUploadError,
+    transcriptionTitle,
+    uploadError
+  } = useTranscriptionDraft();
+  const {
+    batchSessions,
+    health,
+    healthDetails,
+    jobs,
+    models,
+    refresh,
+    setBatchSessions
+  } = useAppSnapshot(
+    client,
+    appEnvironment?.isTauri ?? false,
+    backendLifecycle?.state,
+    setBackendLifecycle,
+    setSelectedJobId,
+    setNotice
+  );
   const selectedJob = jobs.find((job) => job.job_id === selectedJobId) ?? null;
+  const selectedJobRefreshKey = selectedJobDetailsRefreshKey(selectedJob);
+  const {
+    artifacts,
+    events,
+    finalMarkdownStatus,
+    segments,
+    setFinalMarkdownStatus,
+    setSegments,
+    setSpeakerReview,
+    speakerReview
+  } = useSelectedJobDetails(client, selectedJobId, selectedJobRefreshKey, setNotice);
   const selectedBatchSession = batchSessions.find((session) => session.session_id === selectedBatchSessionId) ?? null;
   const selectedBatchItem = selectedBatchSession?.items.find((item) => item.item_id === selectedBatchItemId) ?? null;
   const selectedJobDisplayStatus = selectedJob ? displayStatus(selectedJob) : null;
@@ -176,7 +191,6 @@ export function App() {
     selectedLastEventTime === null ? null : Math.floor((now - selectedLastEventTime) / 1000);
   const isSelectedJobQuiet =
     isActiveJob(selectedJob) && secondsSinceLastEvent !== null && secondsSinceLastEvent >= 60;
-  const hasModelDownload = models?.models.some((model) => model.status === "downloading") ?? false;
   const selectedModel = models?.models.find((model) => model.name === selectedModelName) ?? null;
   const outputDir = appEnvironment?.outputDir ?? healthDetails?.app?.output_dir ?? null;
   const cacheDir = appEnvironment?.cacheDir ?? healthDetails?.app?.cache_dir ?? null;
@@ -195,7 +209,6 @@ export function App() {
     isSubmitting,
     selectedModelIsReady
   });
-  const selectedJobRefreshKey = selectedJobDetailsRefreshKey(selectedJob);
   const selectedSpeakerTurns = useMemo(() => speakerTurns(segments), [segments]);
   const selectedDiarizationDiagnostic = diarizationDiagnostic(selectedJob);
   const selectedDiarizationTechnicalDiagnostic = diarizationTechnicalDiagnostic(selectedJob);
@@ -210,41 +223,6 @@ export function App() {
     const query = searchQuery.trim().toLocaleLowerCase("ru");
     return batchSessions.filter((session) => !query || session.items.some((item) => item.display_title.toLocaleLowerCase("ru").includes(query)));
   }, [batchSessions, searchQuery]);
-
-  const refresh = useCallback(async () => {
-    try {
-      const nextHealth = await client.health();
-      setHealth("ok");
-      setHealthDetails(nextHealth);
-      const onlineLifecycle = await markBackendOnline(isManagedApp);
-      if (onlineLifecycle) setBackendLifecycle(onlineLifecycle);
-      const [nextJobs, nextModels, nextBatchSessions] = await Promise.all([
-        client.listJobs(),
-        client.listModels(),
-        client.listBatchSessions()
-      ]);
-      setJobs(nextJobs);
-      setModels(nextModels);
-      setBatchSessions(nextBatchSessions);
-      await deliverTerminalNotifications(nextJobs, nextBatchSessions, isManagedApp);
-      setSelectedModelName((current) =>
-        nextModels.models.some((model) => model.name === current) ? current : nextModels.current_model
-      );
-      setSelectedJobId((current) =>
-        current && nextJobs.some((job) => job.job_id === current) ? current : null
-      );
-      setNotice(null);
-    } catch (error) {
-      setHealth("down");
-      setHealthDetails(null);
-      const message = error instanceof Error ? error.message : "Сервис недоступен";
-      const offlineLifecycle = await markBackendOffline(isManagedApp, message);
-      if (offlineLifecycle) {
-        setBackendLifecycle(offlineLifecycle);
-      }
-      setNotice(message);
-    }
-  }, [client, isManagedApp]);
 
   useEffect(() => {
     let isActive = true;
@@ -308,9 +286,9 @@ export function App() {
   }, [apiBase, isManagedApp]);
 
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
-
+    if (!models || models.models.some((model) => model.name === selectedModelName)) return;
+    setSelectedModelName(models.current_model);
+  }, [models, selectedModelName]);
   useEffect(() => {
     if (!isManagedApp) return;
     const timer = window.setInterval(() => {
@@ -324,61 +302,11 @@ export function App() {
     }, 2500);
     return () => window.clearInterval(timer);
   }, [isManagedApp]);
-
-  useEffect(() => {
-    if (!hasActiveJobs && !hasModelDownload) return;
-    const timer = window.setInterval(() => void refresh(), 2500);
-    return () => window.clearInterval(timer);
-  }, [hasActiveJobs, hasModelDownload, refresh]);
-
-  useEffect(() => {
-    if (!isManagedApp) return;
-    if (!["starting", "checking", "offline", "restarting"].includes(backendLifecycle?.state ?? "")) {
-      return;
-    }
-    const timer = window.setInterval(() => void refresh(), 2500);
-    return () => window.clearInterval(timer);
-  }, [backendLifecycle?.state, isManagedApp, refresh]);
-
   useEffect(() => {
     if (!hasActiveJobs) return;
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, [hasActiveJobs]);
-
-  useEffect(() => {
-    if (!selectedJobId) {
-      setSegments([]);
-      setArtifacts([]);
-      setEvents([]);
-      setFinalMarkdownStatus(null);
-      setSpeakerReview(null);
-      return;
-    }
-    let isActive = true;
-    Promise.all([
-      client.getTranscript(selectedJobId),
-      client.listArtifacts(selectedJobId),
-      client.listEvents(selectedJobId),
-      client.finalMarkdownStatus(selectedJobId),
-      client.speakerReview(selectedJobId)
-    ])
-      .then(([transcript, nextArtifacts, nextEvents, nextFinalMarkdownStatus, nextSpeakerReview]) => {
-        if (!isActive) return;
-        setSegments(transcript.segments);
-        setArtifacts(nextArtifacts);
-        setEvents(nextEvents);
-        setFinalMarkdownStatus(nextFinalMarkdownStatus);
-        setSpeakerReview(nextSpeakerReview);
-      })
-      .catch((error) => {
-        if (isActive) setNotice(error instanceof Error ? error.message : "Задача недоступна");
-      });
-    return () => {
-      isActive = false;
-    };
-  }, [client, selectedJobId, selectedJobRefreshKey]);
-
   useEffect(() => {
     if (!selectedJob || displayStatus(selectedJob) !== "completed") return;
     if (!speakerReview) return;
