@@ -253,27 +253,18 @@ export function eventDisplayMessage(event: JobEvent, job: Job | null): string {
 }
 
 export function speakerTurns(segments: TranscriptSegment[]): SpeakerTurn[] {
-  const turns: SpeakerTurn[] = [];
-  for (const segment of segments) {
+  return segments.map((segment) => {
     const speakerLabel = displaySpeakerLabel(segment.speaker_label);
     const text = (segment.text_clean || segment.text_raw).trim();
-    const previous = turns[turns.length - 1];
-    if (speakerLabel && previous?.speakerLabel === speakerLabel) {
-      previous.end_seconds = segment.end_seconds;
-      if (text) previous.texts.push(text);
-      previous.segments.push(segment);
-      continue;
-    }
-    turns.push({
+    return {
       id: segment.segment_id,
       speakerLabel,
       start_seconds: segment.start_seconds,
       end_seconds: segment.end_seconds,
       texts: text ? [text] : [],
       segments: [segment]
-    });
-  }
-  return turns;
+    };
+  });
 }
 
 export function displaySpeakerLabel(value: string | null | undefined): string {
