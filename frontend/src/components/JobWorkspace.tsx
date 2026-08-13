@@ -251,10 +251,10 @@ function ResultScreen({
 function TranscriptPreview({ turns }: { turns: SpeakerTurn[] }) {
   return (
     <section className="transcript-preview">
-      <h2>Фрагмент транскрипции</h2>
-      {turns.slice(0, 4).map((turn) => (
+      <h2>Транскрипция</h2>
+      {turns.map((turn) => (
         <article key={turn.id}>
-          <header>{turn.speakerLabel && <strong>{turn.speakerLabel}</strong>}<time>{formatSeconds(turn.start_seconds)}–{formatSeconds(turn.end_seconds)}</time></header>
+          <header>{turn.speakerLabel && <strong>{turn.speakerLabel}</strong>}<time>{formatSeconds(turn.start_seconds)}</time></header>
           <p>{turn.texts.join(" ")}</p>
         </article>
       ))}

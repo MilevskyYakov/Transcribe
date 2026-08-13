@@ -63,7 +63,18 @@ async function mockApp(page: Page, jobs: object[]) {
     await route.fulfill({ status: 202, json: { batch_session: session, job: jobs.at(-1) } });
   });
   await page.route(/http:\/\/127\.0\.0\.1:8765\/jobs\/[^/]+\/transcript/, (route) => route.fulfill({
-    json: { job: completedJob, segments: [{ segment_id: "1", start_seconds: 0, end_seconds: 8, text_raw: "Обсудили план запуска.", text_clean: "Обсудили план запуска.", speaker_label: "Яков" }], words: [] }
+    json: {
+      job: completedJob,
+      segments: Array.from({ length: 5 }, (_, index) => ({
+        segment_id: String(index + 1),
+        start_seconds: index * 8,
+        end_seconds: (index + 1) * 8,
+        text_raw: `Реплика ${index + 1}`,
+        text_clean: `Реплика ${index + 1}`,
+        speaker_label: "Яков"
+      })),
+      words: []
+    }
   }));
   await page.route(/http:\/\/127\.0\.0\.1:8765\/jobs\/[^/]+\/artifacts/, (route) => route.fulfill({ json: { artifacts: [] } }));
   await page.route(/http:\/\/127\.0\.0\.1:8765\/jobs\/[^/]+\/events/, (route) => route.fulfill({ json: { events: [] } }));
@@ -91,7 +102,12 @@ test("launch, selected file, history, result and settings keep one workspace sta
   await expect(page.getByRole("heading", { name: "Стратегическая встреча" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Открыть Markdown" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Показать в Finder" })).toBeVisible();
-  await expect(page.getByText("Фрагмент транскрипции")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Транскрипция" })).toBeVisible();
+  await expect(page.getByText("Реплика 5")).toBeVisible();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(page.locator(".transcript-preview")).toHaveCSS("width", "760px");
+  await page.setViewportSize({ width: 320, height: 700 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
   await expect(page.getByText("Перетащите записи сюда")).toHaveCount(0);
 
   await page.getByRole("button", { name: "Настройки", exact: true }).click();

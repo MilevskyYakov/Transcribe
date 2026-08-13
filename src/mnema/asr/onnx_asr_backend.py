@@ -19,7 +19,7 @@ from mnema.asr.external_model_cache import (
 )
 
 
-_DEFAULT_CHUNK_SECONDS = 60.0
+_DEFAULT_CHUNK_SECONDS = 15.0
 _CPU_PROVIDERS = ["CPUExecutionProvider"]
 _ONNX_RUNTIME_FAILURE_MESSAGE = (
     "ONNX ASR модель не смогла обработать аудио. "

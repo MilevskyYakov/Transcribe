@@ -159,7 +159,7 @@ describe("job titles", () => {
 });
 
 describe("transcript presentation", () => {
-  it("groups adjacent chunks by speaker role instead of showing each timed chunk first", () => {
+  it("keeps adjacent chunks as separate readable turns", () => {
     const turns = speakerTurns([
       {
         segment_id: "seg-001",
@@ -192,8 +192,8 @@ describe("transcript presentation", () => {
         id: "seg-001",
         speakerLabel: "Менеджер",
         start_seconds: 0,
-        end_seconds: 60,
-        texts: ["первая часть", "продолжение"],
+        end_seconds: 20,
+        texts: ["первая часть"],
         segments: [
           {
             segment_id: "seg-001",
@@ -202,7 +202,16 @@ describe("transcript presentation", () => {
             text_raw: "первая часть",
             text_clean: "первая часть",
             speaker_label: "Менеджер"
-          },
+          }
+        ]
+      },
+      {
+        id: "seg-002",
+        speakerLabel: "Менеджер",
+        start_seconds: 20,
+        end_seconds: 60,
+        texts: ["продолжение"],
+        segments: [
           {
             segment_id: "seg-002",
             start_seconds: 20,

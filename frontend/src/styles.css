@@ -193,10 +193,10 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus
 .result-file p { margin-top: 5px; color: var(--muted); font-size: 13px; }
 .result-file.missing > svg { color: var(--error); }
 .result-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 24px 0 36px; }
-.transcript-preview { margin-top: 36px; border-top: 1px solid var(--line); }
+.transcript-preview { width: min(100%, 760px); margin-top: 36px; border-top: 1px solid var(--line); }
 .transcript-preview h2, .details-grid h2, .settings-section h2, .speaker-review-panel h2 { margin: 0; font-size: 18px; }
 .transcript-preview > h2 { padding: 22px 0 10px; }
-.transcript-preview article { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 20px; border-bottom: 1px solid var(--line); padding: 16px 0; }
+.transcript-preview article { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 20px; border-bottom: 1px solid var(--line); padding: 16px 0; }
 .transcript-preview article header { display: grid; align-content: start; gap: 4px; }
 .transcript-preview time { color: var(--muted); font-size: 12px; }
 .transcript-preview p { margin: 0; line-height: 1.55; }
@@ -314,7 +314,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus
   .sidebar-history { display: none; }
   .settings-entry { margin-top: 8px; }
   .workspace { padding: 28px 18px; }
-  .screen-header { margin-bottom: 28px; }
+  .screen-header { flex-direction: column; margin-bottom: 28px; }
   .processing-field, .details-grid, .diagnostic-grid, .batch-layout { grid-template-columns: 1fr; }
   .processing-field { gap: 24px; }
   .progress-number { font-size: 80px; }

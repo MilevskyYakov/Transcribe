@@ -64,6 +64,27 @@ def test_onnx_backend_splits_long_wav_before_recognition(tmp_path: Path) -> None
     assert result.segments[-1].end_seconds == 2.5
 
 
+def test_onnx_backend_defaults_to_short_timed_chunks(tmp_path: Path) -> None:
+    wav_path = tmp_path / "long.wav"
+    with wave.open(str(wav_path), "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(1)
+        wav.writeframes(b"\0\0" * 31)
+
+    class CountingModel:
+        def recognize(self, media_path: str) -> str:
+            return Path(media_path).stem
+
+    result = OnnxAsrBackend("gigaam-v3", model=CountingModel()).transcribe(str(wav_path))
+
+    assert [(segment.start_seconds, segment.end_seconds) for segment in result.segments] == [
+        (0.0, 15.0),
+        (15.0, 30.0),
+        (30.0, 31.0),
+    ]
+
+
 def test_onnx_backend_retries_coreml_failure_on_cpu(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(
         "mnema.asr.onnx_asr_backend.ensure_external_model_ready",
