@@ -34,9 +34,9 @@ from mnema.service.job_store import (
     list_events,
     list_jobs,
     load_job,
+    mutate_job_payload,
     read_json_file,
     write_failed_job_payload,
-    write_job_payload,
 )
 from mnema.service.responses import (
     batch_to_response,
@@ -273,8 +273,8 @@ def speaker_review_endpoint(ctx: Any, job_id: str) -> ApiResponse:
 
 
 def update_speaker_review_endpoint(ctx: Any, job_id: str) -> ApiResponse:
-    job = load_job(ctx.output_root, job_id)
-    if job is None:
+    job_json = ctx.output_root / job_id / "job.json"
+    if not job_json.exists():
         return json_response({"error": "job_not_found"}, HTTPStatus.NOT_FOUND)
     segments = read_json_file(ctx.output_root / job_id / "segments.json", [])
     segment_payloads = segments if isinstance(segments, list) else []
@@ -283,28 +283,31 @@ def update_speaker_review_endpoint(ctx: Any, job_id: str) -> ApiResponse:
         raw_assignments = payload.get("assignments", {})
         if not isinstance(raw_assignments, dict):
             raise ValueError("'assignments' must be an object.")
-        review_payload = update_speaker_assignments(
-            job,
-            segment_payloads,
-            {str(key): str(value) for key, value in raw_assignments.items()},
-            skipped=bool(payload.get("skipped", False)),
-        )
+        assignments = {str(key): str(value) for key, value in raw_assignments.items()}
+        review_payload: JsonObject = {}
         final_markdown = None
-        raw_metadata = job.get("metadata")
-        metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
-        autosave_dir = payload.get("autosave_dir") or metadata.get("final_markdown_dir")
-        if isinstance(autosave_dir, str) and autosave_dir.strip():
-            status = save_final_markdown(job, ctx.output_root, autosave_dir)
-            sync_saved_markdown_metadata(job, status)
-            cleanup_report = cleanup_successful_job_media(
+        def save_review(job: JsonObject) -> None:
+            nonlocal review_payload, final_markdown
+            review_payload = update_speaker_assignments(
                 job,
-                output_root=ctx.output_root,
-                job_id=job_id,
-                temp_root=Path(ctx.app_config.app.temp_dir),
+                segment_payloads,
+                assignments,
+                skipped=bool(payload.get("skipped", False)),
             )
-            job["metadata"]["saved_markdown_cleanup"] = cleanup_report.to_payload()
-            final_markdown = status.to_payload()
-        write_job_payload(ctx.output_root / job_id / "job.json", job)
+            raw_metadata = job.get("metadata")
+            metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
+            autosave_dir = payload.get("autosave_dir") or metadata.get("final_markdown_dir")
+            if isinstance(autosave_dir, str) and autosave_dir.strip():
+                final_markdown = _save_markdown_transition(
+                    job,
+                    output_root=ctx.output_root,
+                    job_id=job_id,
+                    autosave_dir=autosave_dir,
+                    temp_root=Path(ctx.app_config.app.temp_dir),
+                )
+
+        if mutate_job_payload(job_json, save_review) is None:
+            return json_response({"error": "job_not_found"}, HTTPStatus.NOT_FOUND)
     except FileNotFoundError as error:
         return json_response({"error": str(error)}, HTTPStatus.NOT_FOUND)
     except ValueError as error:
@@ -344,37 +347,59 @@ def final_markdown_status_endpoint(ctx: Any, job_id: str) -> ApiResponse:
     if job is None:
         return json_response({"error": "job_not_found"}, HTTPStatus.NOT_FOUND)
     status = inspect_saved_final_markdown(job)
-    sync_saved_markdown_metadata(job, status)
-    write_job_payload(ctx.output_root / job_id / "job.json", job)
     return json_response(status.to_payload())
 
 
 def save_final_markdown_endpoint(ctx: Any, job_id: str) -> ApiResponse:
-    job = load_job(ctx.output_root, job_id)
-    if job is None:
+    job_json = ctx.output_root / job_id / "job.json"
+    if not job_json.exists():
         return json_response({"error": "job_not_found"}, HTTPStatus.NOT_FOUND)
     try:
         payload = ctx.read_json_object()
-        raw_metadata = job.get("metadata")
-        metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
-        autosave_dir = payload.get("autosave_dir") or metadata.get("final_markdown_dir")
-        if not isinstance(autosave_dir, str) or not autosave_dir.strip():
-            raise ValueError("Выберите папку для сохранения транскрипций")
-        status = save_final_markdown(job, ctx.output_root, autosave_dir)
-        sync_saved_markdown_metadata(job, status)
-        cleanup_report = cleanup_successful_job_media(
-            job,
-            output_root=ctx.output_root,
-            job_id=job_id,
-            temp_root=Path(ctx.app_config.app.temp_dir),
-        )
-        job["metadata"]["saved_markdown_cleanup"] = cleanup_report.to_payload()
-        write_job_payload(ctx.output_root / job_id / "job.json", job)
+        status: JsonObject = {}
+
+        def save_markdown(job: JsonObject) -> None:
+            nonlocal status
+            raw_metadata = job.get("metadata")
+            metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
+            autosave_dir = payload.get("autosave_dir") or metadata.get("final_markdown_dir")
+            if not isinstance(autosave_dir, str) or not autosave_dir.strip():
+                raise ValueError("Выберите папку для сохранения транскрипций")
+            status = _save_markdown_transition(
+                job,
+                output_root=ctx.output_root,
+                job_id=job_id,
+                autosave_dir=autosave_dir,
+                temp_root=Path(ctx.app_config.app.temp_dir),
+            )
+
+        if mutate_job_payload(job_json, save_markdown) is None:
+            return json_response({"error": "job_not_found"}, HTTPStatus.NOT_FOUND)
     except FileNotFoundError as error:
         return json_response({"error": str(error)}, HTTPStatus.NOT_FOUND)
     except ValueError as error:
         return json_response({"error": str(error)}, HTTPStatus.BAD_REQUEST)
-    return json_response(status.to_payload())
+    return json_response(status)
+
+
+def _save_markdown_transition(
+    job: JsonObject,
+    *,
+    output_root: Path,
+    job_id: str,
+    autosave_dir: str,
+    temp_root: Path,
+) -> JsonObject:
+    status = save_final_markdown(job, output_root, autosave_dir)
+    sync_saved_markdown_metadata(job, status)
+    cleanup_report = cleanup_successful_job_media(
+        job,
+        output_root=output_root,
+        job_id=job_id,
+        temp_root=temp_root,
+    )
+    job["metadata"]["saved_markdown_cleanup"] = cleanup_report.to_payload()
+    return status.to_payload()
 
 
 def create_job_endpoint(ctx: Any) -> ApiResponse:
@@ -506,31 +531,29 @@ def run_background_job(
             display_title=display_title,
         )
         if initial_metadata:
-            payload = load_job(output_root, job_id)
-            if payload is not None:
+            def add_initial_metadata(payload: JsonObject) -> None:
                 metadata = payload.setdefault("metadata", {})
                 if isinstance(metadata, dict):
                     metadata.update(initial_metadata)
-                write_job_payload(output_root / job_id / "job.json", payload)
+
+            mutate_job_payload(output_root / job_id / "job.json", add_initial_metadata)
         return
     if final_markdown_dir:
-        payload = load_job(output_root, job_id)
         segments = read_json_file(output_root / job_id / "segments.json", [])
         segment_payloads = segments if isinstance(segments, list) else []
-        if (
-            payload is not None
-            and build_speaker_review_payload(payload, segment_payloads)["status"] != "pending"
-        ):
-            status = save_final_markdown(payload, output_root, final_markdown_dir)
-            sync_saved_markdown_metadata(payload, status)
-            cleanup_report = cleanup_successful_job_media(
+
+        def autosave(payload: JsonObject) -> None:
+            if build_speaker_review_payload(payload, segment_payloads)["status"] == "pending":
+                return
+            _save_markdown_transition(
                 payload,
                 output_root=output_root,
                 job_id=job_id,
+                autosave_dir=final_markdown_dir,
                 temp_root=Path(config.app.temp_dir),
             )
-            payload["metadata"]["saved_markdown_cleanup"] = cleanup_report.to_payload()
-            write_job_payload(output_root / job_id / "job.json", payload)
+
+        mutate_job_payload(output_root / job_id / "job.json", autosave)
 
 
 def _read_batch_item_request(ctx: Any) -> JsonObject:

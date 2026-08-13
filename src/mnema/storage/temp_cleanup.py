@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from mnema.service.types import JsonObject
+from mnema.storage.artifact_store import mutate_job_payload
 
 DEFAULT_TEMP_RETENTION_DAYS = 7
 
@@ -110,14 +111,27 @@ def cleanup_stale_temporary_media(
     report = CleanupReport()
     if output_root.exists():
         for job_json in output_root.glob("*/job.json"):
-            job = _read_job(job_json)
-            if job is None or str(job.get("status") or "") not in STALE_JOB_STATUSES:
-                continue
-            job_report = _cleanup_stale_job_media(job, job_json.parent, temp_root, cutoff)
-            if job_report.removed_count or job_report.errors:
-                _record_cleanup_metadata(job, job_report, reason="stale_retention")
-                _write_job(job_json, job)
-                report.merge(job_report)
+            current_job_json = job_json
+            job_report = CleanupReport()
+
+            def cleanup(
+                job: JsonObject,
+                job_json: Path = current_job_json,
+            ) -> None:
+                nonlocal job_report
+                if str(job.get("status") or "") not in STALE_JOB_STATUSES:
+                    return
+                job_report = _cleanup_stale_job_media(
+                    job,
+                    job_json.parent,
+                    temp_root,
+                    cutoff,
+                )
+                if job_report.removed_count or job_report.errors:
+                    _record_cleanup_metadata(job, job_report, reason="stale_retention")
+
+            mutate_job_payload(current_job_json, cleanup)
+            report.merge(job_report)
     report.merge(_cleanup_orphan_uploads(temp_root / "uploads", cutoff))
     return report
 
@@ -240,19 +254,3 @@ def _record_cleanup_metadata(job: JsonObject, report: CleanupReport, *, reason: 
     if report.errors:
         metadata["temp_cleanup"]["errors"] = report.errors
     job["metadata"] = metadata
-
-
-def _read_job(job_json: Path) -> JsonObject | None:
-    import json
-
-    try:
-        payload = json.loads(job_json.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-    return payload if isinstance(payload, dict) else None
-
-
-def _write_job(job_json: Path, job: JsonObject) -> None:
-    import json
-
-    job_json.write_text(json.dumps(job, ensure_ascii=False, indent=2), encoding="utf-8")

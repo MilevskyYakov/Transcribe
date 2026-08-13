@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Any
-from uuid import uuid4
 
 from mnema.app.models import JobStatus
+from mnema.storage import artifact_store
 
 from .contracts import ArtifactResponse, dataclass_payload, event_response
 from .responses import job_to_response
@@ -32,40 +33,50 @@ def mark_interrupted_jobs(output_root: Path) -> None:
     if not output_root.exists():
         return
     for job_json in output_root.glob("*/job.json"):
-        payload = read_json_file(job_json, None)
-        if not isinstance(payload, dict) or payload.get("status") not in {"queued", "processing"}:
-            continue
-        job_id = str(payload.get("job_id") or job_json.parent.name)
-        message = "Обработка была прервана перезапуском сервера. Запустите файл заново"
-        progress = int(metadata_value(payload, "progress", 0))
-        payload["status"] = JobStatus.FAILED.value
-        warnings_list = payload.get("warnings")
-        if not isinstance(warnings_list, list):
-            warnings_list = []
-        if message not in warnings_list:
-            warnings_list.append(message)
-        payload["warnings"] = warnings_list
-        metadata = payload.get("metadata")
-        if not isinstance(metadata, dict):
-            metadata = {}
-        event = {
-            "timestamp": datetime.utcnow().isoformat(timespec="seconds") + "Z",
-            "stage": "interrupted",
-            "status": "error",
-            "message": message,
-            "progress": progress,
-        }
-        events = metadata.get("events")
-        if not isinstance(events, list):
-            events = []
-        events.append(event)
-        metadata["events"] = events[-80:]
-        metadata["current_stage"] = "interrupted"
-        metadata["last_message"] = message
-        metadata["progress"] = progress
-        payload["metadata"] = metadata
-        write_job_payload(job_json, payload)
-        append_event_files(output_root / job_id, event)
+        current_job_json = job_json
+        event: JsonObject | None = None
+        job_id = current_job_json.parent.name
+
+        def mark_interrupted(
+            payload: JsonObject,
+            job_json: Path = current_job_json,
+        ) -> None:
+            nonlocal event, job_id
+            if payload.get("status") not in {"queued", "processing"}:
+                return
+            job_id = str(payload.get("job_id") or job_json.parent.name)
+            message = "Обработка была прервана перезапуском сервера. Запустите файл заново"
+            progress = int(metadata_value(payload, "progress", 0))
+            payload["status"] = JobStatus.FAILED.value
+            warnings_list = payload.get("warnings")
+            if not isinstance(warnings_list, list):
+                warnings_list = []
+            if message not in warnings_list:
+                warnings_list.append(message)
+            payload["warnings"] = warnings_list
+            metadata = payload.get("metadata")
+            if not isinstance(metadata, dict):
+                metadata = {}
+            event = {
+                "timestamp": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+                "stage": "interrupted",
+                "status": "error",
+                "message": message,
+                "progress": progress,
+            }
+            events = metadata.get("events")
+            if not isinstance(events, list):
+                events = []
+            events.append(event)
+            metadata["events"] = events[-80:]
+            metadata["current_stage"] = "interrupted"
+            metadata["last_message"] = message
+            metadata["progress"] = progress
+            payload["metadata"] = metadata
+
+        mutate_job_payload(current_job_json, mark_interrupted)
+        if event is not None:
+            append_event_files(output_root / job_id, event)
 
 
 def load_job(output_root: Path, job_id: str) -> JsonObject | None:
@@ -81,9 +92,14 @@ def metadata_value(payload: JsonObject, key: str, fallback: Any) -> Any:
 
 
 def write_job_payload(job_json: Path, payload: JsonObject) -> None:
-    temporary = job_json.with_suffix(f".{uuid4().hex}.tmp")
-    temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    temporary.replace(job_json)
+    artifact_store.write_job_payload(job_json, payload)
+
+
+def mutate_job_payload(
+    job_json: Path,
+    mutation: Callable[[JsonObject], None],
+) -> JsonObject | None:
+    return artifact_store.mutate_job_payload(job_json, mutation)
 
 
 def write_failed_job_payload(

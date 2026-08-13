@@ -292,6 +292,9 @@ def test_final_markdown_endpoint_saves_external_file_and_uses_title_download_nam
     )
 
     saved = job_endpoints.save_final_markdown_endpoint(ctx, "job-local")
+    job_json = job_dir / "job.json"
+    before_status_get = job_json.read_bytes()
+    before_status_get_mtime = job_json.stat().st_mtime_ns
     status = job_endpoints.final_markdown_status_endpoint(ctx, "job-local")
     download = job_endpoints.artifact_download_endpoint(ctx, "job-local", "final_speech_text_md")
     artifacts = job_endpoints.artifacts_endpoint(ctx, "job-local").payload["artifacts"]
@@ -301,6 +304,8 @@ def test_final_markdown_endpoint_saves_external_file_and_uses_title_download_nam
     assert not uploaded_source_path.exists()
     assert not normalized_audio_path.exists()
     assert status.payload["status"] == "saved"
+    assert job_json.read_bytes() == before_status_get
+    assert job_json.stat().st_mtime_ns == before_status_get_mtime
     assert download.download_name == "Client call.md"
     assert [artifact["name"] for artifact in artifacts] == ["final_speech_text_md"]
 
