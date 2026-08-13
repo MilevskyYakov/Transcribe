@@ -95,7 +95,7 @@ export function SettingsPanel({
         <section className="settings-section">
           <h2>Обновления</h2>
           <div className={`setting-row update ${updateStatusTone(updateState.status)}`}>
-            <div><strong>{updateState.version ? `Версия ${updateState.version}` : "Mnema для macOS"}</strong><p>{updateProgressLabel(updateState) ?? updateState.message}</p></div>
+            <div><strong>{updateState.version ? `Версия ${updateState.version}` : "Mnema Desktop"}</strong><p>{updateProgressLabel(updateState) ?? updateState.message}</p></div>
             <button className="secondary-button" disabled={!canRunUpdateAction(updateState, isManagedApp)} type="button" onClick={onUpdateAction}>
               {updateActionLabel(updateState, isManagedApp)}
             </button>

@@ -38,6 +38,8 @@ pub(crate) struct AppBootstrap {
     pub(crate) ffprobe_path: Option<String>,
     pub(crate) default_model_name: String,
     pub(crate) autosave_markdown_dir: Option<String>,
+    pub(crate) desktop_platform: String,
+    pub(crate) native_file_actions: bool,
     pub(crate) backend_lifecycle: BackendLifecycleSnapshot,
 }
 
@@ -319,13 +321,19 @@ pub(crate) fn start_backend<R: Runtime>(
     fs::create_dir_all(&model_dir)?;
     let settings = load_settings(&settings_path)?;
 
-    let resource_dir = bundled_resource_dir_from_exe().unwrap_or_else(dev_resource_dir);
+    let resource_dir = app
+        .path()
+        .resource_dir()
+        .ok()
+        .map(|path| path.join("resources"))
+        .filter(|path| path.join("configs/default.yaml").exists())
+        .unwrap_or_else(dev_resource_dir);
     let config_path = resource_file(&resource_dir, "configs/default.yaml");
     let bundled_bin_dir = std::env::current_exe()
         .ok()
         .and_then(|path| path.parent().map(Path::to_path_buf))
         .unwrap_or_else(|| resource_dir.join("bin"));
-    let media_bin_dir = if bundled_bin_dir.join("ffmpeg").exists() {
+    let media_bin_dir = if binary_path(&bundled_bin_dir, "ffmpeg").is_some() {
         bundled_bin_dir
     } else {
         resource_dir.join("bin")
@@ -383,19 +391,60 @@ fn copy_missing_tree(source: &Path, destination: &Path) -> std::io::Result<()> {
 fn backend_sidecar_path() -> PathBuf {
     if let Some(path) = std::env::current_exe()
         .ok()
-        .and_then(|path| path.parent().map(|dir| dir.join("mnema-backend")))
+        .and_then(|path| {
+            path.parent()
+                .map(|dir| dir.join(executable_name("mnema-backend")))
+        })
         .filter(|path| path.exists())
     {
         return path;
     }
 
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("binaries/mnema-backend-aarch64-apple-darwin")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!(
+        "binaries/mnema-backend-{}{}",
+        target_triple(),
+        executable_suffix()
+    ))
 }
 
 pub(crate) fn binary_path(root: &Path, name: &str) -> Option<PathBuf> {
-    let path = root.join(name);
+    let path = root.join(executable_name(name));
     path.exists().then_some(path)
 }
+
+fn executable_name(name: &str) -> String {
+    executable_name_for(name, cfg!(windows))
+}
+
+fn executable_name_for(name: &str, windows: bool) -> String {
+    format!("{name}{}", if windows { ".exe" } else { "" })
+}
+
+#[cfg(windows)]
+fn executable_suffix() -> &'static str {
+    ".exe"
+}
+
+#[cfg(not(windows))]
+fn executable_suffix() -> &'static str {
+    ""
+}
+
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+fn target_triple() -> &'static str {
+    "aarch64-apple-darwin"
+}
+
+#[cfg(all(windows, target_arch = "x86_64"))]
+fn target_triple() -> &'static str {
+    "x86_64-pc-windows-msvc"
+}
+
+#[cfg(not(any(
+    all(target_os = "macos", target_arch = "aarch64"),
+    all(windows, target_arch = "x86_64")
+)))]
+compile_error!("Mnema desktop supports only macOS arm64 and Windows x64");
 
 fn lifecycle_snapshot(
     state: &str,
@@ -427,15 +476,6 @@ fn dev_resource_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources")
 }
 
-fn bundled_resource_dir_from_exe() -> Option<PathBuf> {
-    let exe_dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
-    let resource_dir = exe_dir.join("../Resources/resources");
-    resource_dir
-        .join("configs/default.yaml")
-        .exists()
-        .then_some(resource_dir)
-}
-
 fn resource_file(resource_dir: &Path, relative: &str) -> PathBuf {
     let path = resource_dir.join(relative);
     if path.exists() {
@@ -449,7 +489,8 @@ fn resource_file(resource_dir: &Path, relative: &str) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::{
-        copy_missing_tree, lifecycle_snapshot, BackendRuntime, BackendState, PROCESS_POLL_INTERVAL,
+        binary_path, copy_missing_tree, executable_name_for, lifecycle_snapshot, BackendRuntime,
+        BackendState, PROCESS_POLL_INTERVAL,
     };
     use crate::settings::AppSettings;
     use std::{
@@ -459,6 +500,22 @@ mod tests {
         thread,
         time::{Duration, Instant},
     };
+
+    #[test]
+    fn executable_names_cover_macos_and_windows() {
+        assert_eq!(executable_name_for("mnema-backend", false), "mnema-backend");
+        assert_eq!(
+            executable_name_for("mnema-backend", true),
+            "mnema-backend.exe"
+        );
+
+        let root = unique_temp_dir("binary-name");
+        fs::create_dir_all(&root).unwrap();
+        let expected = root.join(executable_name_for("ffmpeg", cfg!(windows)));
+        fs::write(&expected, "binary").unwrap();
+        assert_eq!(binary_path(&root, "ffmpeg"), Some(expected));
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn migration_copies_missing_data_and_keeps_newer_files() {

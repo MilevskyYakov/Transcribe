@@ -6,6 +6,7 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
 };
+use tauri_plugin_shell::ShellExt;
 
 #[tauri::command]
 pub(crate) fn app_bootstrap(state: tauri::State<'_, BackendState>) -> AppBootstrap {
@@ -28,6 +29,8 @@ pub(crate) fn app_bootstrap(state: tauri::State<'_, BackendState>) -> AppBootstr
         ffprobe_path: ffprobe_path.map(|path| path.display().to_string()),
         default_model_name: settings.default_model_name,
         autosave_markdown_dir: settings.autosave_markdown_dir,
+        desktop_platform: desktop_platform().to_string(),
+        native_file_actions: cfg!(any(target_os = "macos", windows)),
         backend_lifecycle: state.lifecycle(),
     }
 }
@@ -43,13 +46,17 @@ pub(crate) fn is_regular_file_path(path: String) -> bool {
 }
 
 #[tauri::command]
-pub(crate) fn open_saved_markdown(path: String) -> Result<(), String> {
-    run_macos_open(&existing_file(&path)?, false)
+pub(crate) fn open_saved_markdown(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    let path = existing_file(&path)?;
+    #[allow(deprecated)]
+    app.shell()
+        .open(path.display().to_string(), None)
+        .map_err(|error| format!("Failed to open Markdown with default app: {error}"))
 }
 
 #[tauri::command]
 pub(crate) fn reveal_saved_markdown(path: String) -> Result<(), String> {
-    run_macos_open(&existing_file(&path)?, true)
+    reveal_native_file(&existing_file(&path)?)
 }
 
 fn existing_file(path: &str) -> Result<PathBuf, String> {
@@ -62,12 +69,9 @@ fn existing_file(path: &str) -> Result<PathBuf, String> {
 }
 
 #[cfg(target_os = "macos")]
-fn run_macos_open(path: &Path, reveal: bool) -> Result<(), String> {
-    let mut command = Command::new("/usr/bin/open");
-    if reveal {
-        command.arg("-R");
-    }
-    let status = command
+fn reveal_native_file(path: &Path) -> Result<(), String> {
+    let status = Command::new("/usr/bin/open")
+        .arg("-R")
         .arg(path)
         .status()
         .map_err(|error| format!("Failed to launch macOS open command: {error}"))?;
@@ -78,9 +82,27 @@ fn run_macos_open(path: &Path, reveal: bool) -> Result<(), String> {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
-fn run_macos_open(_path: &Path, _reveal: bool) -> Result<(), String> {
-    Err("Opening saved Markdown is supported only on macOS".to_string())
+#[cfg(windows)]
+fn reveal_native_file(path: &Path) -> Result<(), String> {
+    let status = Command::new("explorer.exe")
+        .arg(format!("/select,{}", path.display()))
+        .status()
+        .map_err(|error| format!("Failed to launch Windows Explorer: {error}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("Windows Explorer failed with status {status}"))
+    }
+}
+
+fn desktop_platform() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "macos"
+    } else if cfg!(windows) {
+        "windows"
+    } else {
+        "unsupported"
+    }
 }
 
 #[tauri::command]
@@ -167,7 +189,9 @@ mod tests {
     #[test]
     fn existing_file_accepts_files_and_rejects_missing_paths() {
         let path = std::env::temp_dir().join(format!("mnema-markdown-{}.md", std::process::id()));
+        let directory = std::env::temp_dir().join(format!("mnema-markdown-{}", std::process::id()));
         fs::write(&path, "# Mnema").unwrap();
+        fs::create_dir_all(&directory).unwrap();
 
         assert_eq!(
             existing_file(path.to_str().unwrap()).unwrap(),
@@ -178,6 +202,11 @@ mod tests {
             existing_file(path.to_str().unwrap()).unwrap_err(),
             "Markdown file does not exist"
         );
+        assert_eq!(
+            existing_file(directory.to_str().unwrap()).unwrap_err(),
+            "Markdown file does not exist"
+        );
+        fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]

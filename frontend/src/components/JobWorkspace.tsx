@@ -23,6 +23,7 @@ interface JobWorkspaceProps {
   events: JobEvent[];
   finalMarkdownStatus: FinalMarkdownStatus | null;
   isSavingFinalMarkdown: boolean;
+  nativeFileActions: boolean;
   notice: string | null;
   selectedDiarizationDiagnostic: string | null;
   selectedDiarizationTechnicalDiagnostic: string | null;
@@ -36,8 +37,9 @@ interface JobWorkspaceProps {
   onOpenFinalMarkdown: () => void;
   onSaveFinalMarkdownAgain: () => void;
   onSaveSpeakerAssignments: (assignments: Record<string, string>) => void;
-  onShowInFinder: () => void;
+  onRevealFile: () => void;
   onSkipSpeakerAssignments: (assignments: Record<string, string>) => void;
+  revealFileLabel: string;
 }
 
 export function JobWorkspace({
@@ -47,6 +49,7 @@ export function JobWorkspace({
   events,
   finalMarkdownStatus,
   isSavingFinalMarkdown,
+  nativeFileActions,
   notice,
   selectedDiarizationDiagnostic,
   selectedDiarizationTechnicalDiagnostic,
@@ -60,8 +63,9 @@ export function JobWorkspace({
   onOpenFinalMarkdown,
   onSaveFinalMarkdownAgain,
   onSaveSpeakerAssignments,
-  onShowInFinder,
-  onSkipSpeakerAssignments
+  onRevealFile,
+  onSkipSpeakerAssignments,
+  revealFileLabel
 }: JobWorkspaceProps) {
   if (isActiveJob(selectedJob)) {
     return (
@@ -93,6 +97,7 @@ export function JobWorkspace({
       finalMarkdownStatus={finalMarkdownStatus}
       isSaving={isSavingFinalMarkdown}
       job={selectedJob}
+      nativeFileActions={nativeFileActions}
       notice={notice}
       diarizationDiagnostic={selectedDiarizationDiagnostic}
       diarizationTechnicalDiagnostic={selectedDiarizationTechnicalDiagnostic}
@@ -104,8 +109,9 @@ export function JobWorkspace({
       onOpenFile={onOpenFinalMarkdown}
       onSaveAgain={onSaveFinalMarkdownAgain}
       onSaveSpeakerAssignments={onSaveSpeakerAssignments}
-      onShowInFinder={onShowInFinder}
+      onRevealFile={onRevealFile}
       onSkipSpeakerAssignments={onSkipSpeakerAssignments}
+      revealFileLabel={revealFileLabel}
     />
   );
 }
@@ -156,6 +162,7 @@ function ResultScreen({
   finalMarkdownStatus,
   isSaving,
   job,
+  nativeFileActions,
   notice,
   diarizationDiagnostic,
   diarizationTechnicalDiagnostic,
@@ -167,8 +174,9 @@ function ResultScreen({
   onOpenFile,
   onSaveAgain,
   onSaveSpeakerAssignments,
-  onShowInFinder,
-  onSkipSpeakerAssignments
+  onRevealFile,
+  onSkipSpeakerAssignments,
+  revealFileLabel
 }: {
   artifacts: Artifact[];
   autosaveMarkdownDir: string | null;
@@ -177,6 +185,7 @@ function ResultScreen({
   finalMarkdownStatus: FinalMarkdownStatus | null;
   isSaving: boolean;
   job: Job;
+  nativeFileActions: boolean;
   notice: string | null;
   diarizationDiagnostic: string | null;
   diarizationTechnicalDiagnostic: string | null;
@@ -188,8 +197,9 @@ function ResultScreen({
   onOpenFile: () => void;
   onSaveAgain: () => void;
   onSaveSpeakerAssignments: (assignments: Record<string, string>) => void;
-  onShowInFinder: () => void;
+  onRevealFile: () => void;
   onSkipSpeakerAssignments: (assignments: Record<string, string>) => void;
+  revealFileLabel: string;
 }) {
   const savedPath = finalMarkdownStatus?.path ?? job.metadata.saved_markdown_path ?? null;
   const filename = finalMarkdownStatus?.filename ?? job.metadata.saved_markdown_filename ?? null;
@@ -226,9 +236,9 @@ function ResultScreen({
           {missing ? (
             <button className="primary-button" disabled={isSaving} type="button" onClick={onSaveAgain}>{isSaving ? "Сохраняю…" : "Сохранить заново"}</button>
           ) : (
-            <button className="primary-button" disabled={!savedPath} type="button" onClick={onOpenFile}><ExternalLink size={17} /> Открыть Markdown</button>
+            nativeFileActions && <button className="primary-button" disabled={!savedPath} type="button" onClick={onOpenFile}><ExternalLink size={17} /> Открыть Markdown</button>
           )}
-          <button className="secondary-button" disabled={!savedPath || missing} type="button" onClick={onShowInFinder}><FolderOpen size={17} /> Показать в Finder</button>
+          {nativeFileActions && <button className="secondary-button" disabled={!savedPath || missing} type="button" onClick={onRevealFile}><FolderOpen size={17} /> {revealFileLabel}</button>}
           <button className="text-button" type="button" onClick={onNewTranscription}>Новая транскрипция</button>
           {missing && <button className="text-button" type="button" onClick={onChooseFolder}>Изменить папку</button>}
         </div>

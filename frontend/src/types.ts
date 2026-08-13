@@ -237,6 +237,8 @@ export interface AppEnvironment {
   ffprobeAvailable?: boolean;
   ffmpegPath?: string | null;
   ffprobePath?: string | null;
+  desktopPlatform?: "macos" | "windows" | "unsupported";
+  nativeFileActions?: boolean;
   isTauri: boolean;
 }
 

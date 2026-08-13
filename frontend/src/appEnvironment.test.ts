@@ -5,6 +5,7 @@ import {
   isTauriRuntime,
   loadWebAutosaveMarkdownDir,
   loadWebDefaultModel,
+  revealFileLabel,
   resolveAppEnvironment,
   saveDefaultModel
 } from "./appEnvironment";
@@ -37,6 +38,11 @@ describe("app environment", () => {
       apiBaseUrl: "http://127.0.0.1:8765",
       isTauri: false
     });
+  });
+
+  it("uses platform-specific native reveal copy", () => {
+    expect(revealFileLabel("macos")).toBe("Показать в Finder");
+    expect(revealFileLabel("windows")).toBe("Показать в Explorer");
   });
 
   it("persists the default model in localStorage outside Tauri", async () => {
