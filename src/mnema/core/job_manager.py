@@ -2,16 +2,24 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 import json
+from dataclasses import asdict
+from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 
 from mnema.app.config import AppConfig
 from mnema.app.models import ArtifactManifest, Job, JobStatus
-from mnema.storage.artifact_store import save_config_snapshot, save_job
+from mnema.storage.artifact_store import mutate_job_payload, save_config_snapshot, save_job
 from mnema.storage.filenames import safe_markdown_filename
 from mnema.storage.paths import JobPaths, build_job_paths
+
+TERMINAL_JOB_STATUSES = {
+    JobStatus.COMPLETED.value,
+    JobStatus.COMPLETED_WITH_WARNINGS.value,
+    JobStatus.FAILED_PARTIAL.value,
+    JobStatus.FAILED.value,
+}
 
 
 def create_job(
@@ -70,7 +78,26 @@ def create_job(
 
 def persist_job(job: Job, job_paths: JobPaths) -> None:
     """Write the latest job state to disk."""
-    save_job(job, job_paths.job_json)
+    def merge_pipeline_state(payload: dict[str, object]) -> None:
+        persisted_status = payload.get("status")
+        if persisted_status not in TERMINAL_JOB_STATUSES or job.status.value in TERMINAL_JOB_STATUSES:
+            payload["status"] = job.status.value
+        payload["detected_language"] = job.detected_language
+        payload["warnings"] = list(job.warnings)
+        payload["artifacts"] = asdict(job.artifacts)
+        metadata = payload.get("metadata")
+        if not isinstance(metadata, dict):
+            metadata = {}
+        metadata.update(job.metadata)
+        payload["metadata"] = metadata
+
+    persisted = mutate_job_payload(job_paths.job_json, merge_pipeline_state)
+    if persisted is None:
+        save_job(job, job_paths.job_json)
+        return
+    metadata = persisted.get("metadata")
+    if isinstance(metadata, dict):
+        job.metadata.update(metadata)
 
 
 def append_job_event(

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import threading
+from collections.abc import Callable
 from dataclasses import asdict, is_dataclass
 from enum import Enum
 from pathlib import Path
@@ -13,10 +15,36 @@ from mnema.app.config import AppConfig
 from mnema.app.models import Job, TranscriptSegment
 from mnema.asr.transcription_service import TranscriptionResult
 
+JsonObject = dict[str, Any]
+JOB_STATE_LOCK = threading.RLock()
+
 
 def save_job(job: Job, destination: Path) -> None:
     """Persist job metadata to JSON."""
-    _write_json(destination, _normalize(asdict(job)))
+    write_job_payload(destination, _normalize(asdict(job)))
+
+
+def mutate_job_payload(
+    destination: Path,
+    mutation: Callable[[JsonObject], None],
+) -> JsonObject | None:
+    """Apply one serialized read-modify-write operation to job metadata."""
+    with JOB_STATE_LOCK:
+        try:
+            payload = json.loads(destination.read_text(encoding="utf-8"))
+        except (FileNotFoundError, json.JSONDecodeError):
+            return None
+        if not isinstance(payload, dict):
+            return None
+        mutation(payload)
+        _write_json(destination, payload)
+        return payload
+
+
+def write_job_payload(destination: Path, payload: JsonObject) -> None:
+    """Atomically replace job metadata under the shared job-state lock."""
+    with JOB_STATE_LOCK:
+        _write_json(destination, payload)
 
 
 def save_config_snapshot(config: AppConfig, destination: Path) -> None:

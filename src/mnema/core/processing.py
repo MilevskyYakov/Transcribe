@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import threading
 import traceback
 from dataclasses import dataclass
@@ -27,6 +26,7 @@ from mnema.ingest.manifest_loader import load_speaker_manifest, speaker_hint_to_
 from mnema.media.normalizer import normalize_media
 from mnema.media.probes import probe_media
 from mnema.storage.artifact_store import (
+    mutate_job_payload,
     save_segments,
     save_transcription_result,
     save_words,
@@ -307,23 +307,16 @@ def _cleanup_successful_intermediates(context: ProcessingContext) -> None:
     """Remove session artifacts after a completed job has durable outputs."""
     if context.job.status not in {JobStatus.COMPLETED, JobStatus.COMPLETED_WITH_WARNINGS}:
         return
-    try:
-        payload = json.loads(context.job_paths.job_json.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return
-    if not isinstance(payload, dict):
-        return
-    cleanup_successful_job_media(
-        payload,
-        output_root=context.job_paths.job_dir.parent,
-        job_id=context.job.job_id,
-        temp_root=Path(context.config.app.temp_dir),
-    )
-    context.job_paths.job_json.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-    metadata = payload.get("metadata")
+    def cleanup(payload: dict[str, Any]) -> None:
+        cleanup_successful_job_media(
+            payload,
+            output_root=context.job_paths.job_dir.parent,
+            job_id=context.job.job_id,
+            temp_root=Path(context.config.app.temp_dir),
+        )
+
+    payload = mutate_job_payload(context.job_paths.job_json, cleanup)
+    metadata = payload.get("metadata") if payload is not None else None
     if isinstance(metadata, dict):
         context.job.metadata.update(metadata)
 
