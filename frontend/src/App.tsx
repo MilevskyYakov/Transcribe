@@ -10,6 +10,7 @@ import {
   loadWebDefaultModel,
   openSavedMarkdownPath,
   revealSavedMarkdownPath,
+  revealFileLabel,
   resolveAppEnvironment,
   restartBackend,
   saveAutosaveMarkdownDir,
@@ -736,13 +737,13 @@ export function App() {
     }
   }
 
-  async function showFinalMarkdownInFinder() {
+  async function revealFinalMarkdown() {
     const path = finalMarkdownStatus?.path ?? selectedJob?.metadata.saved_markdown_path ?? null;
     if (!path) return;
     try {
       await revealSavedMarkdownPath(path, isManagedApp);
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Не удалось показать файл в Finder");
+      setNotice(error instanceof Error ? error.message : "Не удалось показать файл в папке");
     }
   }
 
@@ -971,6 +972,7 @@ export function App() {
             events={events}
             finalMarkdownStatus={finalMarkdownStatus}
             isSavingFinalMarkdown={isSavingFinalMarkdown}
+            nativeFileActions={appEnvironment?.nativeFileActions ?? false}
             notice={notice}
             selectedDiarizationDiagnostic={selectedDiarizationDiagnostic}
             selectedDiarizationTechnicalDiagnostic={selectedDiarizationTechnicalDiagnostic}
@@ -984,7 +986,8 @@ export function App() {
             onOpenFinalMarkdown={() => void openFinalMarkdown()}
             onSaveFinalMarkdownAgain={() => void saveSelectedFinalMarkdown()}
             onSaveSpeakerAssignments={(assignments) => void saveSpeakerAssignments(assignments, false)}
-            onShowInFinder={() => void showFinalMarkdownInFinder()}
+            onRevealFile={() => void revealFinalMarkdown()}
+            revealFileLabel={revealFileLabel(appEnvironment?.desktopPlatform)}
             onSkipSpeakerAssignments={(assignments) => void saveSpeakerAssignments(assignments, true)}
           />
         ) : (

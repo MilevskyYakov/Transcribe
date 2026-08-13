@@ -13,6 +13,8 @@ interface TauriBootstrapPayload {
   ffmpeg_path?: string | null;
   ffprobe_path?: string | null;
   backend_lifecycle?: BackendLifecycle | null;
+  desktop_platform?: "macos" | "windows" | "unsupported";
+  native_file_actions?: boolean;
 }
 
 export const DEFAULT_MODEL_STORAGE_KEY = "mnema-default-model";
@@ -28,6 +30,10 @@ declare global {
 
 export function isTauriRuntime(): boolean {
   return typeof window !== "undefined" && window.__TAURI_INTERNALS__ !== undefined;
+}
+
+export function revealFileLabel(platform: AppEnvironment["desktopPlatform"]): string {
+  return platform === "windows" ? "Показать в Explorer" : "Показать в Finder";
 }
 
 export async function resolveAppEnvironment(defaultApiBase: string): Promise<AppEnvironment> {
@@ -54,6 +60,8 @@ export async function resolveAppEnvironment(defaultApiBase: string): Promise<App
       ffmpegPath: payload.ffmpeg_path,
       ffprobePath: payload.ffprobe_path,
       backendLifecycle: payload.backend_lifecycle ?? null,
+      desktopPlatform: payload.desktop_platform ?? "unsupported",
+      nativeFileActions: payload.native_file_actions ?? false,
       isTauri: true
     };
   } catch (error) {
