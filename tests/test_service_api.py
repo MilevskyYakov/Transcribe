@@ -1,6 +1,7 @@
 import json
 import threading
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
@@ -437,10 +438,44 @@ def test_multipart_payload_parser_stores_uploads(tmp_path: Path) -> None:
     payload = payload_from_multipart_form(form, tmp_path / "uploads")
 
     assert Path(str(payload["input_path"])).read_bytes() == b"audio"
+    assert payload["source_filename"] == "source.wav"
     assert payload["speaker_hint"] == "Яков"
     assert payload["display_title"] == "Planning sync"
     assert payload["final_markdown_dir"] == "/Users/demo/Documents"
     assert Path(str(payload["speaker_manifest_path"])).read_bytes() == b"{}"
+
+
+def test_concurrent_multipart_uploads_with_same_names_stay_isolated(tmp_path: Path) -> None:
+    def upload(content: bytes, speaker: str):
+        form = {
+            "media": SimpleNamespace(filename="shared.bin", file=BytesIO(content)),
+            "speaker_manifest": SimpleNamespace(
+                filename="shared.bin",
+                file=BytesIO(speaker.encode()),
+            ),
+        }
+        return payload_from_multipart_form(form, tmp_path / "uploads")
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first, second = list(
+            pool.map(lambda args: upload(*args), [(b"first", "one"), (b"second", "two")])
+        )
+
+    first_media = Path(str(first["input_path"]))
+    second_media = Path(str(second["input_path"]))
+    first_manifest = Path(str(first["speaker_manifest_path"]))
+    second_manifest = Path(str(second["speaker_manifest_path"]))
+    assert first_media != second_media
+    assert first_media.read_bytes() == b"first"
+    assert second_media.read_bytes() == b"second"
+    assert first_manifest != second_manifest
+    assert first_manifest.read_text() == "one"
+    assert second_manifest.read_text() == "two"
+    assert first["source_filename"] == "shared.bin"
+    assert first_media.name == "media.bin"
+    assert first_manifest.name == "speaker_manifest.bin"
+    assert first_media.parent == first_manifest.parent
+    assert second_media.parent == second_manifest.parent
 
 
 def test_models_response_marks_interrupted_download_as_recoverable() -> None:
