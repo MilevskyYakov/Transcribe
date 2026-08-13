@@ -312,6 +312,7 @@ def test_final_markdown_endpoint_saves_external_file_and_uses_title_download_nam
 
 def test_post_jobs_uses_shared_processing_entrypoint(tmp_path: Path, monkeypatch) -> None:
     output_root = tmp_path / "output"
+    external_output_root = tmp_path / "external-output"
     config = AppConfig(app=AppSection(output_dir=str(output_root)))
     source_file = tmp_path / "sample.wav"
     source_file.write_bytes(b"fake")
@@ -356,9 +357,15 @@ def test_post_jobs_uses_shared_processing_entrypoint(tmp_path: Path, monkeypatch
             {
                 "input_path": str(source_file),
                 "display_title": "Client sync",
+                "output_dir": str(external_output_root),
                 "final_markdown_dir": str(final_markdown_dir),
             },
         )
+        job_id = response["job"]["job_id"]
+        jobs = _get_json(f"{base_url}/jobs")
+        job = _get_json(f"{base_url}/jobs/{job_id}")
+        transcript = _get_json(f"{base_url}/jobs/{job_id}/transcript")
+        artifacts = _get_json(f"{base_url}/jobs/{job_id}/artifacts")
     finally:
         httpd.shutdown()
         httpd.server_close()
@@ -370,12 +377,24 @@ def test_post_jobs_uses_shared_processing_entrypoint(tmp_path: Path, monkeypatch
     assert response["job"]["metadata"]["source_filename"] == "sample.wav"
     assert response["job"]["metadata"]["final_markdown_dir"] == str(final_markdown_dir)
     assert response["message"].endswith("queued")
+    assert jobs["jobs"][0]["job_id"] == job_id
+    assert job["job"]["job_id"] == job_id
+    assert transcript["job"]["job_id"] == job_id
+    assert {artifact["name"] for artifact in artifacts["artifacts"]} == {
+        "config_snapshot",
+        "log_file",
+    }
+    assert (output_root / job_id / "job.json").exists()
+    assert not external_output_root.exists()
 
 
 def test_post_batch_returns_report(tmp_path: Path, monkeypatch) -> None:
-    config = AppConfig(app=AppSection(output_dir=str(tmp_path / "output")))
+    output_root = tmp_path / "output"
+    config = AppConfig(app=AppSection(output_dir=str(output_root)))
+    received_output_roots = []
 
     def fake_process_batch(input_paths, **kwargs):
+        received_output_roots.append(kwargs["output_root"])
         return BatchResult(
             exit_code=0,
             total=1,
@@ -401,7 +420,13 @@ def test_post_batch_returns_report(tmp_path: Path, monkeypatch) -> None:
     base_url = f"http://127.0.0.1:{httpd.server_port}"
 
     try:
-        response = _post_json(f"{base_url}/batch", {"input_paths": [str(tmp_path / "a.wav")]})
+        response = _post_json(
+            f"{base_url}/batch",
+            {
+                "input_paths": [str(tmp_path / "a.wav")],
+                "output_dir": str(tmp_path / "external-output"),
+            },
+        )
     finally:
         httpd.shutdown()
         httpd.server_close()
@@ -409,6 +434,37 @@ def test_post_batch_returns_report(tmp_path: Path, monkeypatch) -> None:
 
     assert response["total"] == 1
     assert response["items"][0]["job_id"] == "job-a"
+    assert received_output_roots == [output_root]
+
+
+def test_post_watch_folder_uses_service_output_root(tmp_path: Path, monkeypatch) -> None:
+    output_root = tmp_path / "output"
+    config = AppConfig(app=AppSection(output_dir=str(output_root)))
+    received_output_roots = []
+
+    def fake_scan_watch_folder(input_dir, **kwargs):
+        received_output_roots.append(kwargs["output_root"])
+        return BatchResult(0, 0, 0, 0, output_root / "batch.json", [])
+
+    monkeypatch.setattr(job_endpoints, "scan_watch_folder", fake_scan_watch_folder)
+    httpd = build_server(config=config, host="127.0.0.1", port=0)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        _post_json(
+            f"http://127.0.0.1:{httpd.server_port}/watch-folder/scan",
+            {
+                "input_dir": str(tmp_path / "incoming"),
+                "output_dir": str(tmp_path / "external-output"),
+            },
+        )
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=2)
+
+    assert received_output_roots == [output_root]
 
 
 def test_freeform_speaker_hint_extracts_names() -> None:

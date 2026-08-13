@@ -407,7 +407,7 @@ def create_job_endpoint(ctx: Any) -> ApiResponse:
         payload = ctx.read_job_request()
         job_config = config_for_payload(ctx.app_config, payload)
         resolved_input = resolve_single_input(payload["input_path"])
-        output_root = Path(payload.get("output_dir") or ctx.output_root)
+        output_root = ctx.output_root
         display_title = display_title_from_payload(payload)
         raw_final_markdown_dir = payload.get("final_markdown_dir")
         final_markdown_dir = (
@@ -463,7 +463,7 @@ def create_batch_endpoint(ctx: Any) -> ApiResponse:
             raise ValueError("'input_paths' must be a non-empty list.")
         result = process_batch(
             input_paths,
-            output_root=payload.get("output_dir") or ctx.output_root,
+            output_root=ctx.output_root,
             config=config_for_payload(ctx.app_config, payload),
             speaker_manifest_path=payload.get("speaker_manifest_path"),
             speaker_hint=payload.get("speaker_hint"),
@@ -483,7 +483,7 @@ def scan_watch_folder_endpoint(ctx: Any) -> ApiResponse:
             raise ValueError("'input_dir' is required.")
         result = scan_watch_folder(
             input_dir,
-            output_root=payload.get("output_dir") or ctx.output_root,
+            output_root=ctx.output_root,
             config=config_for_payload(ctx.app_config, payload),
             recursive=bool(payload.get("recursive", False)),
             stability_seconds=payload.get("stability_seconds"),
