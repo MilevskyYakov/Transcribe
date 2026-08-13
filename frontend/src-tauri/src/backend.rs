@@ -6,11 +6,15 @@ use std::{
     net::TcpListener,
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
-    sync::Mutex,
+    sync::{Arc, Mutex},
     thread,
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use tauri::{Manager, Runtime};
+
+const READINESS_TIMEOUT: Duration = Duration::from_secs(30);
+const PROCESS_POLL_INTERVAL: Duration = Duration::from_millis(100);
+const RECENT_OUTPUT_LIMIT: usize = 50;
 
 #[derive(Clone, Serialize)]
 pub(crate) struct BackendLifecycleSnapshot {
@@ -41,6 +45,7 @@ struct BackendRuntime {
     api_base_url: String,
     child: Option<Child>,
     lifecycle: BackendLifecycleSnapshot,
+    generation: u64,
 }
 
 pub(crate) struct BackendState {
@@ -53,14 +58,15 @@ pub(crate) struct BackendState {
     pub(crate) default_model_name: Mutex<String>,
     pub(crate) autosave_markdown_dir: Mutex<Option<String>>,
     config_path: PathBuf,
-    runtime: Mutex<BackendRuntime>,
+    sidecar_path: PathBuf,
+    runtime: Arc<Mutex<BackendRuntime>>,
 }
 
 impl Drop for BackendState {
     fn drop(&mut self) {
         if let Ok(mut runtime) = self.runtime.lock() {
             if let Some(mut process) = runtime.child.take() {
-                let _ = process.kill();
+                stop_child(&mut process);
             }
         }
     }
@@ -109,38 +115,29 @@ impl BackendState {
         }
     }
 
-    pub(crate) fn stop(&self) {
-        if let Ok(mut runtime) = self.runtime.lock() {
-            if let Some(mut process) = runtime.child.take() {
-                let _ = process.kill();
-            }
+    pub(crate) fn restart(&self) -> BackendLifecycleSnapshot {
+        let Ok(mut runtime) = self.runtime.lock() else {
+            return self.lifecycle();
+        };
+        if let Some(mut process) = runtime.child.take() {
+            stop_child(&mut process);
         }
-    }
-
-    pub(crate) fn restart<R: Runtime>(
-        &self,
-        _app: &tauri::AppHandle<R>,
-    ) -> BackendLifecycleSnapshot {
-        self.stop();
-        self.set_lifecycle("restarting", "Перезапускаем…", None);
-        self.spawn_backend();
-        self.lifecycle()
-    }
-
-    fn set_lifecycle(&self, state: &str, human_message: &str, detail: Option<String>) {
-        if let Ok(mut runtime) = self.runtime.lock() {
-            runtime.lifecycle.state = state.to_string();
-            runtime.lifecycle.human_message = human_message.to_string();
-            runtime.lifecycle.technical_detail = detail;
-            runtime.lifecycle.last_check_at = Some(now_stamp());
-        }
+        runtime.lifecycle = lifecycle_snapshot("restarting", "Перезапускаем…", None::<String>);
+        self.spawn_backend_locked(&mut runtime, READINESS_TIMEOUT);
+        runtime.lifecycle.clone()
     }
 
     fn spawn_backend(&self) {
+        if let Ok(mut runtime) = self.runtime.lock() {
+            self.spawn_backend_locked(&mut runtime, READINESS_TIMEOUT);
+        }
+    }
+
+    fn spawn_backend_locked(&self, runtime: &mut BackendRuntime, readiness_timeout: Duration) {
         let port = match reserve_port() {
             Ok(port) => port,
             Err(error) => {
-                self.set_lifecycle(
+                runtime.lifecycle = lifecycle_snapshot(
                     "error",
                     "Не удалось запустить",
                     Some(format!("Failed to reserve local backend port: {error}")),
@@ -149,10 +146,8 @@ impl BackendState {
             }
         };
         let api_base_url = format!("http://127.0.0.1:{port}");
-        if let Ok(mut runtime) = self.runtime.lock() {
-            runtime.api_base_url = api_base_url.clone();
-            runtime.lifecycle = lifecycle_snapshot("starting", "Запускаем…", None::<String>);
-        }
+        runtime.api_base_url = api_base_url.clone();
+        runtime.lifecycle = lifecycle_snapshot("starting", "Запускаем…", None::<String>);
 
         let args = vec![
             "--config".to_string(),
@@ -169,8 +164,7 @@ impl BackendState {
         ];
 
         eprintln!("Starting Mnema backend on {api_base_url}");
-        let sidecar_path = backend_sidecar_path();
-        let mut child = match Command::new(&sidecar_path)
+        let mut child = match Command::new(&self.sidecar_path)
             .args(args)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -178,38 +172,135 @@ impl BackendState {
         {
             Ok(child) => child,
             Err(error) => {
-                self.set_lifecycle(
+                runtime.lifecycle = lifecycle_snapshot(
                     "error",
                     "Не удалось запустить",
                     Some(format!(
                         "Failed to spawn backend sidecar at {}: {error}",
-                        sidecar_path.display()
+                        self.sidecar_path.display()
                     )),
                 );
                 return;
             }
         };
 
+        runtime.generation += 1;
+        let generation = runtime.generation;
+
         if let Some(stdout) = child.stdout.take() {
+            let shared_runtime = Arc::clone(&self.runtime);
             thread::spawn(move || {
                 for line in BufReader::new(stdout).lines().map_while(Result::ok) {
                     println!("mnema backend: {line}");
+                    capture_output(&shared_runtime, generation, line);
                 }
             });
         }
         if let Some(stderr) = child.stderr.take() {
+            let shared_runtime = Arc::clone(&self.runtime);
             thread::spawn(move || {
                 for line in BufReader::new(stderr).lines().map_while(Result::ok) {
                     eprintln!("mnema backend: {line}");
+                    capture_output(&shared_runtime, generation, line);
                 }
             });
         }
 
-        if let Ok(mut runtime) = self.runtime.lock() {
-            runtime.child = Some(child);
-            runtime.lifecycle.state = "checking".to_string();
-            runtime.lifecycle.human_message = "Проверяем…".to_string();
-            runtime.lifecycle.last_check_at = Some(now_stamp());
+        runtime.child = Some(child);
+        runtime.lifecycle.state = "checking".to_string();
+        runtime.lifecycle.human_message = "Проверяем…".to_string();
+        runtime.lifecycle.last_check_at = Some(now_stamp());
+        monitor_child(Arc::clone(&self.runtime), generation, readiness_timeout);
+    }
+}
+
+fn capture_output(runtime: &Arc<Mutex<BackendRuntime>>, generation: u64, line: String) {
+    if let Ok(mut runtime) = runtime.lock() {
+        if runtime.generation != generation {
+            return;
+        }
+        runtime.lifecycle.recent_output.push(line);
+        let overflow = runtime
+            .lifecycle
+            .recent_output
+            .len()
+            .saturating_sub(RECENT_OUTPUT_LIMIT);
+        runtime.lifecycle.recent_output.drain(..overflow);
+    }
+}
+
+fn monitor_child(
+    runtime: Arc<Mutex<BackendRuntime>>,
+    generation: u64,
+    readiness_timeout: Duration,
+) {
+    thread::spawn(move || {
+        let started_at = Instant::now();
+        loop {
+            thread::sleep(PROCESS_POLL_INTERVAL);
+            let Ok(mut runtime) = runtime.lock() else {
+                return;
+            };
+            if runtime.generation != generation {
+                return;
+            }
+            let status = match runtime.child.as_mut() {
+                Some(child) => child.try_wait(),
+                None => return,
+            };
+            match status {
+                Ok(Some(status)) => {
+                    runtime.child = None;
+                    let recent_output = std::mem::take(&mut runtime.lifecycle.recent_output);
+                    let output = recent_output.last().cloned();
+                    runtime.lifecycle = lifecycle_snapshot(
+                        "error",
+                        "Не удалось запустить",
+                        Some(match output {
+                            Some(output) => format!("Backend exited with {status}: {output}"),
+                            None => format!("Backend exited with {status}"),
+                        }),
+                    );
+                    runtime.lifecycle.recent_output = recent_output;
+                    return;
+                }
+                Err(error) => {
+                    runtime.child = None;
+                    runtime.lifecycle = lifecycle_snapshot(
+                        "error",
+                        "Не удалось запустить",
+                        Some(format!("Failed to inspect backend process: {error}")),
+                    );
+                    return;
+                }
+                Ok(None) => {}
+            }
+            if runtime.lifecycle.state != "online" && started_at.elapsed() >= readiness_timeout {
+                if let Some(mut child) = runtime.child.take() {
+                    stop_child(&mut child);
+                }
+                let recent_output = std::mem::take(&mut runtime.lifecycle.recent_output);
+                runtime.lifecycle = lifecycle_snapshot(
+                    "error",
+                    "Не удалось запустить",
+                    Some(format!(
+                        "Backend readiness timed out after {} seconds",
+                        readiness_timeout.as_secs_f64()
+                    )),
+                );
+                runtime.lifecycle.recent_output = recent_output;
+                return;
+            }
+        }
+    });
+}
+
+fn stop_child(child: &mut Child) {
+    match child.try_wait() {
+        Ok(Some(_)) => {}
+        _ => {
+            let _ = child.kill();
+            let _ = child.wait();
         }
     }
 }
@@ -251,11 +342,13 @@ pub(crate) fn start_backend<R: Runtime>(
         default_model_name: Mutex::new(settings.default_model_name),
         autosave_markdown_dir: Mutex::new(settings.autosave_markdown_dir),
         config_path,
-        runtime: Mutex::new(BackendRuntime {
+        sidecar_path: backend_sidecar_path(),
+        runtime: Arc::new(Mutex::new(BackendRuntime {
             api_base_url: String::new(),
             child: None,
             lifecycle: lifecycle_snapshot("starting", "Запускаем…", None::<String>),
-        }),
+            generation: 0,
+        })),
     };
     state.spawn_backend();
     Ok(state)
@@ -357,12 +450,20 @@ fn resource_file(resource_dir: &Path, relative: &str) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
-    use super::copy_missing_tree;
-    use std::{fs, path::PathBuf};
+    use super::{
+        copy_missing_tree, lifecycle_snapshot, BackendRuntime, BackendState, PROCESS_POLL_INTERVAL,
+    };
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+        sync::{Arc, Mutex},
+        thread,
+        time::{Duration, Instant},
+    };
 
     #[test]
     fn migration_copies_missing_data_and_keeps_newer_files() {
-        let root = unique_temp_dir();
+        let root = unique_temp_dir("migration");
         let old = root.join("local.transcribe-doc");
         let new = root.join("local.mnema");
         fs::create_dir_all(old.join("models")).unwrap();
@@ -386,7 +487,121 @@ mod tests {
         fs::remove_dir_all(root).unwrap();
     }
 
-    fn unique_temp_dir() -> PathBuf {
-        std::env::temp_dir().join(format!("mnema-migration-{}", std::process::id()))
+    #[test]
+    fn early_exit_reports_status_and_output() {
+        let root = unique_temp_dir("early-exit");
+        let sidecar = write_sidecar(&root, "echo 'bind failed' >&2\nexit 23");
+        let state = test_state(&root, sidecar);
+
+        state.spawn_backend();
+        let lifecycle = wait_for_state(&state, "error");
+
+        assert!(lifecycle
+            .technical_detail
+            .as_deref()
+            .unwrap()
+            .contains("exit status: 23"));
+        assert_eq!(lifecycle.recent_output, ["bind failed"]);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn readiness_timeout_kills_and_reaps_child() {
+        let root = unique_temp_dir("timeout");
+        let sidecar = write_sidecar(&root, "exec sleep 30");
+        let state = test_state(&root, sidecar);
+
+        let mut runtime = state.runtime.lock().unwrap();
+        state.spawn_backend_locked(&mut runtime, Duration::from_millis(150));
+        drop(runtime);
+        let lifecycle = wait_for_state(&state, "error");
+
+        assert!(lifecycle
+            .technical_detail
+            .as_deref()
+            .unwrap()
+            .contains("readiness timed out"));
+        assert!(state.runtime.lock().unwrap().child.is_none());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn concurrent_restarts_leave_one_tracked_child() {
+        let root = unique_temp_dir("restart");
+        let sidecar = write_sidecar(&root, "exec sleep 30");
+        let state = Arc::new(test_state(&root, sidecar));
+
+        let first = {
+            let state = Arc::clone(&state);
+            thread::spawn(move || state.restart())
+        };
+        let second = {
+            let state = Arc::clone(&state);
+            thread::spawn(move || state.restart())
+        };
+        first.join().unwrap();
+        second.join().unwrap();
+
+        let runtime = state.runtime.lock().unwrap();
+        assert!(runtime.child.is_some());
+        assert_eq!(runtime.generation, 2);
+        drop(runtime);
+        drop(state);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    fn test_state(root: &Path, sidecar_path: PathBuf) -> BackendState {
+        BackendState {
+            app_data_dir: root.to_path_buf(),
+            cache_dir: root.join("cache"),
+            model_dir: root.join("models"),
+            output_dir: root.join("output"),
+            media_bin_dir: root.join("bin"),
+            settings_path: root.join("settings.json"),
+            default_model_name: Mutex::new("tiny".to_string()),
+            autosave_markdown_dir: Mutex::new(None),
+            config_path: root.join("config.yaml"),
+            sidecar_path,
+            runtime: Arc::new(Mutex::new(BackendRuntime {
+                api_base_url: String::new(),
+                child: None,
+                lifecycle: lifecycle_snapshot("starting", "Запускаем…", None::<String>),
+                generation: 0,
+            })),
+        }
+    }
+
+    fn write_sidecar(root: &Path, body: &str) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+
+        fs::create_dir_all(root).unwrap();
+        let path = root.join("sidecar.sh");
+        fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+        path
+    }
+
+    fn wait_for_state(state: &BackendState, expected: &str) -> super::BackendLifecycleSnapshot {
+        let deadline = Instant::now() + Duration::from_secs(3);
+        loop {
+            let lifecycle = state.lifecycle();
+            if lifecycle.state == expected {
+                return lifecycle;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "lifecycle remained {}",
+                lifecycle.state
+            );
+            thread::sleep(PROCESS_POLL_INTERVAL);
+        }
+    }
+
+    fn unique_temp_dir(label: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "mnema-{label}-{}-{:?}",
+            std::process::id(),
+            thread::current().id()
+        ))
     }
 }
