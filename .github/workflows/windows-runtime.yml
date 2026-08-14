@@ -34,7 +34,7 @@ jobs:
         run: |
           $Key = Join-Path $env:RUNNER_TEMP "mnema-ci-updater.key"
           $Password = [Guid]::NewGuid().ToString()
-          npm exec tauri signer generate -- --ci -p $Password -w $Key
+          npm exec --yes --package=@tauri-apps/cli@2.11.1 -- tauri signer generate --ci -p $Password -w $Key
           $ConfigPath = "src-tauri/tauri.conf.json"
           $Config = Get-Content $ConfigPath -Raw | ConvertFrom-Json
           $Config.plugins.updater.pubkey = (Get-Content "$Key.pub" -Raw).Trim()
