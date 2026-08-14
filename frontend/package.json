@@ -12,6 +12,7 @@
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build --target aarch64-apple-darwin",
     "package:mac": "bash ../scripts/package-mac.sh",
+    "package:windows": "powershell -ExecutionPolicy Bypass -File ../scripts/package-windows.ps1",
     "install:local": "bash ../scripts/install-local-app.sh"
   },
   "dependencies": {

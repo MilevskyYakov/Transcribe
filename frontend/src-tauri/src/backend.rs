@@ -543,6 +543,7 @@ mod tests {
         fs::remove_dir_all(root).unwrap();
     }
 
+    #[cfg(unix)]
     #[test]
     fn early_exit_reports_status_and_output() {
         let root = unique_temp_dir("early-exit");
@@ -561,6 +562,7 @@ mod tests {
         fs::remove_dir_all(root).unwrap();
     }
 
+    #[cfg(unix)]
     #[test]
     fn readiness_timeout_kills_and_reaps_child() {
         let root = unique_temp_dir("timeout");
@@ -581,6 +583,7 @@ mod tests {
         fs::remove_dir_all(root).unwrap();
     }
 
+    #[cfg(unix)]
     #[test]
     fn concurrent_restarts_leave_one_tracked_child() {
         let root = unique_temp_dir("restart");
@@ -606,6 +609,7 @@ mod tests {
         fs::remove_dir_all(root).unwrap();
     }
 
+    #[cfg(unix)]
     fn test_state(root: &Path, sidecar_path: PathBuf) -> BackendState {
         BackendState {
             app_data_dir: root.to_path_buf(),
@@ -629,6 +633,7 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
     fn write_sidecar(root: &Path, body: &str) -> PathBuf {
         use std::os::unix::fs::PermissionsExt;
 
@@ -639,6 +644,7 @@ mod tests {
         path
     }
 
+    #[cfg(unix)]
     fn wait_for_state(state: &BackendState, expected: &str) -> super::BackendLifecycleSnapshot {
         let deadline = Instant::now() + Duration::from_secs(3);
         loop {
