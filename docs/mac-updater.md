@@ -62,11 +62,14 @@ Production Windows artifacts are built only by the protected manual workflow
 on `main`; its `production` environment owns the signing secrets:
 
 ```bash
-gh workflow run windows-release.yml --ref main -f tag=v0.2.0
+gh workflow run windows-release.yml --ref main -f tag=v0.2.0 -f previous_tag=v0.1.5
 ```
 
 Create the GitHub Release first. Keep a new release as draft until macOS and
 Windows artifacts plus `latest.json` are attached and checked.
+When `previous_tag` is set, the native smoke installs that public release,
+creates a job/model/settings, upgrades with the new signed installer, and
+checks that all app data survives before uninstall verification.
 
 ## `latest.json` shape for GitHub Releases
 
