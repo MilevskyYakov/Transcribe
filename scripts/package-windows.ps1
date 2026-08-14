@@ -51,7 +51,7 @@ Begin-NativeCommand
 & $Python -m pip install --upgrade pip wheel
 Assert-NativeSuccess "pip bootstrap"
 Begin-NativeCommand
-& $Python -m pip install $Root "pyinstaller==6.16.0"
+& $Python -m pip install $Root "pyinstaller==6.16.0" "setuptools==70.3.0"
 Assert-NativeSuccess "runtime dependency install"
 Begin-NativeCommand
 & $Python -m pip uninstall -y typing
