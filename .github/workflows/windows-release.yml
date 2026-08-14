@@ -74,5 +74,10 @@ jobs:
           if ($Installer.Count -ne 1) { throw "Expected one NSIS installer." }
           $Signature = "$($Installer[0].FullName).sig"
           $Manifest = ".build/windows-x64/runtime-manifest.json"
+          foreach ($Path in @($Installer[0].FullName, $Signature, $Manifest)) {
+            $File = Get-Item $Path
+            $Sha256 = (Get-FileHash $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+            Write-Host "UPLOAD $($File.FullName) | $($File.Length) bytes | sha256:$Sha256"
+          }
           gh release upload $env:RELEASE_TAG $Installer[0].FullName $Signature $Manifest `
             --repo $env:GITHUB_REPOSITORY --clobber
