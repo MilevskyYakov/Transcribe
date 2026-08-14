@@ -236,8 +236,13 @@ if ($Smoke) {
         if (@(Get-ChildItem (Join-Path $AppDataDir "models") -File -Recurse).Count -eq 0) {
             throw "Downloaded model was not saved in app data."
         }
-        @{ default_model_name = "tiny"; autosave_markdown_dir = $FinalDir } |
-            ConvertTo-Json | Set-Content (Join-Path $AppDataDir "settings.json") -Encoding UTF8
+        $SettingsJson = @{ default_model_name = "tiny"; autosave_markdown_dir = $FinalDir } |
+            ConvertTo-Json
+        [IO.File]::WriteAllText(
+            (Join-Path $AppDataDir "settings.json"),
+            $SettingsJson,
+            [Text.UTF8Encoding]::new($false)
+        )
     } finally {
         Stop-Process -Id $App.Id -Force -ErrorAction SilentlyContinue
     }
