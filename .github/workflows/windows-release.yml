@@ -1,0 +1,61 @@
+name: Windows production release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing GitHub Release tag, for example v0.1.5
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-production-release
+  cancel-in-progress: false
+
+jobs:
+  windows-x64:
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    runs-on: windows-2025
+    timeout-minutes: 60
+    env:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - name: Validate release version
+        shell: pwsh
+        run: |
+          $Version = (Get-Content frontend/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          if ("v$Version" -ne "${{ inputs.tag }}") {
+            throw "Release tag ${{ inputs.tag }} does not match app version $Version."
+          }
+          gh release view "${{ inputs.tag }}" --repo "${{ github.repository }}" | Out-Null
+      - name: Build and smoke production installer
+        working-directory: frontend
+        run: npm run package:windows -- -Smoke
+      - name: Upload signed Windows artifacts
+        shell: pwsh
+        run: |
+          $BundleDir = "frontend/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis"
+          $Installer = @(Get-ChildItem $BundleDir -Filter "*-setup.exe")
+          if ($Installer.Count -ne 1) { throw "Expected one NSIS installer." }
+          $Signature = "$($Installer[0].FullName).sig"
+          $Manifest = ".build/windows-x64/runtime-manifest.json"
+          gh release upload "${{ inputs.tag }}" $Installer[0].FullName $Signature $Manifest `
+            --repo "${{ github.repository }}" --clobber
