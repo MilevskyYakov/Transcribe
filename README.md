@@ -305,12 +305,15 @@ npm run package:windows
 
 Команда собирает standalone `mnema-backend.exe` через pinned PyInstaller,
 скачивает pinned FFmpeg/FFprobe archive с обязательной SHA-256 проверкой и
-запускает frontend/Tauri build без installer bundle. Sidecars и `mnema.exe`
-оказываются в `src-tauri/target/x86_64-pc-windows-msvc/release`; точные Python
-версии, размеры и SHA-256 записываются в `.build/windows-x64/runtime-manifest.json`.
+создаёт один Tauri-native NSIS installer и подписанный updater artifact. Нужен
+`TAURI_SIGNING_PRIVATE_KEY`; private key остаётся вне repository. Installer,
+его `.sig`, sidecars и `mnema.exe` записываются в manifest с размерами и SHA-256:
+`.build/windows-x64/runtime-manifest.json`.
 
-Полный native smoke (app bootstrap, health, bundled media tools, путь с
-пробелами/Unicode, tiny Whisper job и Markdown) запускается так:
+Полный native smoke делает silent clean install, проверяет app bootstrap,
+health, bundled media tools, путь с пробелами/Unicode, tiny Whisper job и
+Markdown, затем проверяет сохранность jobs/models/settings при reinstall и
+после uninstall:
 
 ```powershell
 npm run package:windows -- -Smoke
@@ -345,7 +348,7 @@ npm run install:local -- --quit-running
 
 ### Signed in-app updates
 
-Packaged macOS app also has a Tauri v2 signed updater. In the installed app,
+Packaged macOS and Windows apps use the same Tauri v2 signed updater. In the installed app,
 use the sidebar card “Обновление” to check the configured release endpoint,
 show no-update/update/error states, download a signed update, and install it.
 After install the app asks for a restart so the new version opens cleanly.
@@ -356,7 +359,7 @@ Updater artifacts are generated during Tauri build when the release environment
 provides `TAURI_SIGNING_PRIVATE_KEY` (and optional
 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`). The private key must stay outside the repo;
 only the public updater key is committed in `frontend/src-tauri/tauri.conf.json`.
-Full release/update runbook: `docs/mac-updater.md`.
+Full multi-platform release/update runbook: `docs/mac-updater.md`.
 
 В desktop-режиме приложение само запускает локальный backend на свободном
 `127.0.0.1` порту. Runtime data хранится в macOS Application Support:

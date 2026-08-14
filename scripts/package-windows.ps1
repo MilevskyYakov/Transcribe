@@ -38,6 +38,9 @@ function Get-Sha256([string]$Path) {
 if (-not [Environment]::Is64BitOperatingSystem -or $env:OS -ne "Windows_NT") {
     throw "Run this script natively on Windows 11 x64."
 }
+if (-not $env:TAURI_SIGNING_PRIVATE_KEY) {
+    throw "TAURI_SIGNING_PRIVATE_KEY is required to build the signed Windows updater artifact."
+}
 
 New-Item -ItemType Directory -Force -Path $BuildDir, $BinaryDir | Out-Null
 Copy-Item (Join-Path $Root "configs\default.yaml") (Join-Path $TauriDir "resources\configs\default.yaml") -Force
@@ -115,17 +118,23 @@ try {
     npm run build
     Assert-NativeSuccess "frontend build"
     Begin-NativeCommand
-    npm exec tauri build -- --no-bundle --target $Target
-    Assert-NativeSuccess "Tauri build"
+    npm exec tauri build -- --bundles nsis --target $Target
+    Assert-NativeSuccess "Tauri NSIS build"
 } finally {
     Pop-Location
 }
 
 $ReleaseDir = Join-Path $TauriDir "target\$Target\release"
 $AppExe = Join-Path $ReleaseDir "mnema.exe"
+$BundleDir = Join-Path $ReleaseDir "bundle\nsis"
+$Installer = @(Get-ChildItem $BundleDir -Filter "*-setup.exe")
+if ($Installer.Count -ne 1) { throw "Expected one NSIS installer, found $($Installer.Count)." }
+$Installer = $Installer[0].FullName
+$InstallerSignature = "$Installer.sig"
 foreach ($Path in @($AppExe, (Join-Path $ReleaseDir "mnema-backend.exe"), (Join-Path $ReleaseDir "ffmpeg.exe"), (Join-Path $ReleaseDir "ffprobe.exe"))) {
     if (-not (Test-Path $Path)) { throw "Tauri output is missing: $Path" }
 }
+if (-not (Test-Path $InstallerSignature)) { throw "Missing signed updater artifact: $InstallerSignature" }
 
 $Manifest = [ordered]@{
     target = $Target
@@ -135,9 +144,15 @@ $Manifest = [ordered]@{
     python_packages = @(& $Python -m pip freeze)
     artifacts = @{}
 }
-foreach ($Path in @("mnema-backend.exe", "ffmpeg.exe", "ffprobe.exe", "mnema.exe")) {
-    $ArtifactPath = Join-Path $ReleaseDir $Path
-    $Manifest.artifacts[$Path] = [ordered]@{
+foreach ($ArtifactPath in @(
+    (Join-Path $ReleaseDir "mnema-backend.exe"),
+    (Join-Path $ReleaseDir "ffmpeg.exe"),
+    (Join-Path $ReleaseDir "ffprobe.exe"),
+    $AppExe,
+    $Installer,
+    $InstallerSignature
+)) {
+    $Manifest.artifacts[(Split-Path $ArtifactPath -Leaf)] = [ordered]@{
         size = (Get-Item $ArtifactPath).Length
         sha256 = Get-Sha256 $ArtifactPath
     }
@@ -146,6 +161,14 @@ $ManifestPath = Join-Path $BuildDir "runtime-manifest.json"
 $Manifest | ConvertTo-Json -Depth 6 | Set-Content $ManifestPath -Encoding UTF8
 
 if ($Smoke) {
+    $InstallDir = Join-Path $env:LOCALAPPDATA "Mnema"
+    $InstalledApp = Join-Path $InstallDir "mnema.exe"
+    $Uninstaller = Join-Path $InstallDir "uninstall.exe"
+    if (Test-Path $InstallDir) { throw "Clean install smoke requires Mnema to be absent: $InstallDir" }
+    $Install = Start-Process $Installer -ArgumentList "/S" -Wait -PassThru
+    if ($Install.ExitCode -ne 0 -or -not (Test-Path $InstalledApp)) {
+        throw "Silent clean install failed with exit code $($Install.ExitCode)."
+    }
     $SmokeRoot = Join-Path $env:TEMP "Mnema smoke Юникод"
     $FinalDir = Join-Path $SmokeRoot "Markdown с пробелом"
     New-Item -ItemType Directory -Force -Path $FinalDir | Out-Null
@@ -156,7 +179,7 @@ if ($Smoke) {
     $Voice.Speak("Mnema Windows transcription smoke test")
     $Voice.Dispose()
 
-    $App = Start-Process $AppExe -PassThru
+    $App = Start-Process $InstalledApp -PassThru
     try {
         $Backend = $null
         for ($Attempt = 0; $Attempt -lt 120 -and -not $Backend; $Attempt++) {
@@ -168,6 +191,10 @@ if ($Smoke) {
             throw "Bundled backend did not start."
         }
         $BaseUrl = "http://127.0.0.1:$($Matches[1])"
+        if ($Backend.CommandLine -notmatch '--app-data-dir\s+(?:"([^"]+)"|(\S+))') {
+            throw "Bundled backend did not receive an app data directory."
+        }
+        $AppDataDir = if ($Matches[1]) { $Matches[1] } else { $Matches[2] }
         $Health = $null
         for ($Attempt = 0; $Attempt -lt 60 -and -not $Health; $Attempt++) {
             try { $Health = Invoke-RestMethod "$BaseUrl/health" }
@@ -203,8 +230,49 @@ if ($Smoke) {
         if (-not (Test-Path (Join-Path $FinalDir "Windows smoke Юникод.md"))) {
             throw "Canonical Markdown was not saved."
         }
+        if (-not (Test-Path (Join-Path $AppDataDir "output\$JobId\job.json"))) {
+            throw "Canonical job was not saved in app data."
+        }
+        if (@(Get-ChildItem (Join-Path $AppDataDir "models") -File -Recurse).Count -eq 0) {
+            throw "Downloaded model was not saved in app data."
+        }
+        @{ default_model_name = "tiny"; autosave_markdown_dir = $FinalDir } |
+            ConvertTo-Json | Set-Content (Join-Path $AppDataDir "settings.json") -Encoding UTF8
     } finally {
         Stop-Process -Id $App.Id -Force -ErrorAction SilentlyContinue
+    }
+
+    $Reinstall = Start-Process $Installer -ArgumentList "/S" -Wait -PassThru
+    if ($Reinstall.ExitCode -ne 0) { throw "Silent reinstall failed with exit code $($Reinstall.ExitCode)." }
+    $ReinstalledApp = Start-Process $InstalledApp -PassThru
+    try {
+        $ReinstalledBackend = $null
+        for ($Attempt = 0; $Attempt -lt 120 -and -not $ReinstalledBackend; $Attempt++) {
+            Start-Sleep -Milliseconds 500
+            $ReinstalledBackend = Get-CimInstance Win32_Process -Filter "Name = 'mnema-backend.exe'" |
+                Where-Object { $_.ParentProcessId -eq $ReinstalledApp.Id } | Select-Object -First 1
+        }
+        if (-not $ReinstalledBackend) { throw "Reinstalled app did not launch bundled backend." }
+        foreach ($Path in @(
+            (Join-Path $AppDataDir "output\$JobId\job.json"),
+            (Join-Path $AppDataDir "settings.json"),
+            (Join-Path $FinalDir "Windows smoke Юникод.md")
+        )) {
+            if (-not (Test-Path $Path)) { throw "Reinstall did not preserve user data: $Path" }
+        }
+    } finally {
+        Stop-Process -Id $ReinstalledApp.Id -Force -ErrorAction SilentlyContinue
+    }
+    $Uninstall = Start-Process $Uninstaller -ArgumentList "/S" -Wait -PassThru
+    if ($Uninstall.ExitCode -ne 0 -or (Test-Path $InstalledApp)) {
+        throw "Silent uninstall failed with exit code $($Uninstall.ExitCode)."
+    }
+    foreach ($Path in @(
+        (Join-Path $AppDataDir "output\$JobId\job.json"),
+        (Join-Path $AppDataDir "settings.json"),
+        (Join-Path $FinalDir "Windows smoke Юникод.md")
+    )) {
+        if (-not (Test-Path $Path)) { throw "Uninstall removed user data: $Path" }
     }
 }
 
