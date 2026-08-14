@@ -168,7 +168,11 @@ if ($Smoke) {
             throw "Bundled backend did not start."
         }
         $BaseUrl = "http://127.0.0.1:$($Matches[1])"
-        $Health = Invoke-RestMethod "$BaseUrl/health"
+        $Health = $null
+        for ($Attempt = 0; $Attempt -lt 60 -and -not $Health; $Attempt++) {
+            try { $Health = Invoke-RestMethod "$BaseUrl/health" }
+            catch { Start-Sleep -Milliseconds 500 }
+        }
         if ($Health.status -ne "ok" -or -not $Health.media_tools.ffmpeg.available -or -not $Health.media_tools.ffprobe.available) {
             throw "Backend health did not report bundled media tools."
         }
