@@ -1,5 +1,6 @@
 param(
-    [switch]$Smoke
+    [switch]$Smoke,
+    [string]$PreviousInstallerUrl
 )
 
 $ErrorActionPreference = "Stop"
@@ -165,7 +166,21 @@ if ($Smoke) {
     $InstalledApp = Join-Path $InstallDir "mnema.exe"
     $Uninstaller = Join-Path $InstallDir "uninstall.exe"
     if (Test-Path $InstallDir) { throw "Clean install smoke requires Mnema to be absent: $InstallDir" }
-    $Install = Start-Process $Installer -ArgumentList "/S" -Wait -PassThru
+    $InitialInstaller = $Installer
+    if ($PreviousInstallerUrl) {
+        $PreviousUri = $null
+        if (
+            -not [Uri]::TryCreate($PreviousInstallerUrl, [UriKind]::Absolute, [ref]$PreviousUri) -or
+            $PreviousUri.Scheme -ne "https" -or
+            $PreviousUri.Host -ne "github.com" -or
+            -not $PreviousUri.AbsolutePath.StartsWith("/MilevskyYakov/Mnema/releases/download/")
+        ) {
+            throw "Previous installer must be an HTTPS asset from MilevskyYakov/Mnema releases."
+        }
+        $InitialInstaller = Join-Path $BuildDir "previous-version-setup.exe"
+        Invoke-WebRequest -Uri $PreviousInstallerUrl -OutFile $InitialInstaller
+    }
+    $Install = Start-Process $InitialInstaller -ArgumentList "/S" -Wait -PassThru
     if ($Install.ExitCode -ne 0 -or -not (Test-Path $InstalledApp)) {
         throw "Silent clean install failed with exit code $($Install.ExitCode)."
     }
@@ -247,8 +262,8 @@ if ($Smoke) {
         Stop-Process -Id $App.Id -Force -ErrorAction SilentlyContinue
     }
 
-    $Reinstall = Start-Process $Installer -ArgumentList "/S" -Wait -PassThru
-    if ($Reinstall.ExitCode -ne 0) { throw "Silent reinstall failed with exit code $($Reinstall.ExitCode)." }
+    $Upgrade = Start-Process $Installer -ArgumentList "/S" -Wait -PassThru
+    if ($Upgrade.ExitCode -ne 0) { throw "Silent upgrade failed with exit code $($Upgrade.ExitCode)." }
     $ReinstalledApp = Start-Process $InstalledApp -PassThru
     try {
         $ReinstalledBackend = $null
@@ -257,13 +272,13 @@ if ($Smoke) {
             $ReinstalledBackend = Get-CimInstance Win32_Process -Filter "Name = 'mnema-backend.exe'" |
                 Where-Object { $_.ParentProcessId -eq $ReinstalledApp.Id } | Select-Object -First 1
         }
-        if (-not $ReinstalledBackend) { throw "Reinstalled app did not launch bundled backend." }
+        if (-not $ReinstalledBackend) { throw "Upgraded app did not launch bundled backend." }
         foreach ($Path in @(
             (Join-Path $AppDataDir "output\$JobId\job.json"),
             (Join-Path $AppDataDir "settings.json"),
             (Join-Path $FinalDir "Windows smoke Юникод.md")
         )) {
-            if (-not (Test-Path $Path)) { throw "Reinstall did not preserve user data: $Path" }
+            if (-not (Test-Path $Path)) { throw "Upgrade did not preserve user data: $Path" }
         }
     } finally {
         Stop-Process -Id $ReinstalledApp.Id -Force -ErrorAction SilentlyContinue

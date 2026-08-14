@@ -312,7 +312,7 @@ npm run package:windows
 
 Полный native smoke делает silent clean install, проверяет app bootstrap,
 health, bundled media tools, путь с пробелами/Unicode, tiny Whisper job и
-Markdown, затем проверяет сохранность jobs/models/settings при reinstall и
+Markdown, затем проверяет сохранность jobs/models/settings при upgrade/reinstall и
 после uninstall:
 
 ```powershell

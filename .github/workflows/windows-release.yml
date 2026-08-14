@@ -7,6 +7,10 @@ on:
         description: Existing GitHub Release tag, for example v0.1.5
         required: true
         type: string
+      previous_tag:
+        description: Optional previous release tag for upgrade smoke, for example v0.1.4
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -25,6 +29,8 @@ jobs:
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
       GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ inputs.tag }}
+      PREVIOUS_RELEASE_TAG: ${{ inputs.previous_tag }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -42,13 +48,24 @@ jobs:
         shell: pwsh
         run: |
           $Version = (Get-Content frontend/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
-          if ("v$Version" -ne "${{ inputs.tag }}") {
-            throw "Release tag ${{ inputs.tag }} does not match app version $Version."
+          if ("v$Version" -ne $env:RELEASE_TAG) {
+            throw "Release tag $env:RELEASE_TAG does not match app version $Version."
           }
-          gh release view "${{ inputs.tag }}" --repo "${{ github.repository }}" | Out-Null
+          gh release view $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY | Out-Null
       - name: Build and smoke production installer
         working-directory: frontend
-        run: npm run package:windows -- -Smoke
+        shell: pwsh
+        run: |
+          $Arguments = @("run", "package:windows", "--", "-Smoke")
+          $PreviousTag = $env:PREVIOUS_RELEASE_TAG
+          if ($PreviousTag) {
+            if ($PreviousTag -notmatch '^v\d+\.\d+\.\d+$') { throw "Invalid previous release tag." }
+            $PreviousVersion = $PreviousTag.TrimStart("v")
+            $PreviousUrl = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$PreviousTag/Mnema_${PreviousVersion}_x64-setup.exe"
+            $Arguments += @("-PreviousInstallerUrl", $PreviousUrl)
+          }
+          & npm @Arguments
+          if ($LASTEXITCODE -ne 0) { throw "Windows production build failed with exit code $LASTEXITCODE." }
       - name: Upload signed Windows artifacts
         shell: pwsh
         run: |
@@ -57,5 +74,5 @@ jobs:
           if ($Installer.Count -ne 1) { throw "Expected one NSIS installer." }
           $Signature = "$($Installer[0].FullName).sig"
           $Manifest = ".build/windows-x64/runtime-manifest.json"
-          gh release upload "${{ inputs.tag }}" $Installer[0].FullName $Signature $Manifest `
-            --repo "${{ github.repository }}" --clobber
+          gh release upload $env:RELEASE_TAG $Installer[0].FullName $Signature $Manifest `
+            --repo $env:GITHUB_REPOSITORY --clobber
