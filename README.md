@@ -293,6 +293,29 @@ npm run package:mac
 бандлит найденные в PATH `ffmpeg` и `ffprobe`, затем запускает Tauri build под
 `aarch64-apple-darwin`.
 
+### Windows 11 x64 desktop runtime
+
+На Windows 11 x64 установите Python 3.11, Rust с MSVC toolchain, Node.js и
+Visual Studio Build Tools, затем запустите из PowerShell:
+
+```powershell
+cd frontend
+npm run package:windows
+```
+
+Команда собирает standalone `mnema-backend.exe` через pinned PyInstaller,
+скачивает pinned FFmpeg/FFprobe archive с обязательной SHA-256 проверкой и
+запускает frontend/Tauri build без installer bundle. Sidecars и `mnema.exe`
+оказываются в `src-tauri/target/x86_64-pc-windows-msvc/release`; точные Python
+версии, размеры и SHA-256 записываются в `.build/windows-x64/runtime-manifest.json`.
+
+Полный native smoke (app bootstrap, health, bundled media tools, путь с
+пробелами/Unicode, tiny Whisper job и Markdown) запускается так:
+
+```powershell
+npm run package:windows -- -Smoke
+```
+
 `package:mac` только создаёт bundle в репозитории. Уже установленное приложение
 в `/Applications/Mnema.app` после изменений в коде само не обновляется:
 для обычного локального обновления установленного `.app` используйте:

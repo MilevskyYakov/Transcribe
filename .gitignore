@@ -19,6 +19,8 @@ frontend/src-tauri/resources/python/*
 !frontend/src-tauri/resources/python/.gitkeep
 frontend/src-tauri/resources/bin/*
 !frontend/src-tauri/resources/bin/.gitkeep
+frontend/src-tauri/binaries/*-x86_64-pc-windows-msvc.exe
+.build/
 test-results/
 playwright-report/
 *.tsbuildinfo
