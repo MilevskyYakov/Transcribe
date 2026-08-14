@@ -58,6 +58,16 @@ The Windows build creates one NSIS installer and updater signature under
 `frontend/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/`.
 Do not add MSI unless NSIS fails a measured requirement.
 
+Production Windows artifacts are built only by the protected manual workflow
+on `main`; its `production` environment owns the signing secrets:
+
+```bash
+gh workflow run windows-release.yml --ref main -f tag=v0.2.0
+```
+
+Create the GitHub Release first. Keep a new release as draft until macOS and
+Windows artifacts plus `latest.json` are attached and checked.
+
 ## `latest.json` shape for GitHub Releases
 
 Every release feed must include both supported platforms:
