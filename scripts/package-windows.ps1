@@ -16,8 +16,14 @@ $FfmpegArchive = "ffmpeg-N-126122-gca821e458a-win64-gpl.zip"
 $FfmpegUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-13-17-03/$FfmpegArchive"
 $FfmpegSha256 = "94136beb3ddec448ae2c56e3176897dc28f5e81c0c93ae529fa5db9ac75ba7fb"
 
+function Begin-NativeCommand {
+    $script:ErrorActionPreference = "Continue"
+}
+
 function Assert-NativeSuccess([string]$Step) {
-    if ($LASTEXITCODE -ne 0) { throw "$Step failed with exit code $LASTEXITCODE." }
+    $ExitCode = $LASTEXITCODE
+    $script:ErrorActionPreference = "Stop"
+    if ($ExitCode -ne 0) { throw "$Step failed with exit code $ExitCode." }
 }
 
 if (-not [Environment]::Is64BitOperatingSystem -or $env:OS -ne "Windows_NT") {
@@ -28,15 +34,22 @@ New-Item -ItemType Directory -Force -Path $BuildDir, $BinaryDir | Out-Null
 Copy-Item (Join-Path $Root "configs\default.yaml") (Join-Path $TauriDir "resources\configs\default.yaml") -Force
 
 if (-not (Test-Path $Python)) {
+    Begin-NativeCommand
     & py -3.11 -m venv $VenvDir
     Assert-NativeSuccess "Python venv creation"
 }
+Begin-NativeCommand
 & $Python -m pip install --upgrade pip wheel
 Assert-NativeSuccess "pip bootstrap"
+Begin-NativeCommand
 & $Python -m pip install $Root "pyinstaller==6.16.0"
 Assert-NativeSuccess "runtime dependency install"
+Begin-NativeCommand
+& $Python -m pip uninstall -y typing
+Assert-NativeSuccess "obsolete typing backport removal"
 
 $BackendDist = Join-Path $BuildDir "backend-dist"
+Begin-NativeCommand
 & $Python -m PyInstaller --clean --noconfirm --onefile --noupx `
     --name mnema-backend `
     --distpath $BackendDist `
@@ -74,19 +87,25 @@ foreach ($Name in $Artifacts.Keys) {
     if (-not (Test-Path $Destination)) { throw "Missing generated sidecar: $Destination" }
 }
 
+Begin-NativeCommand
 & (Join-Path $BinaryDir "mnema-backend-$Target.exe") --help | Out-Null
 Assert-NativeSuccess "backend self-check"
+Begin-NativeCommand
 & (Join-Path $BinaryDir "ffmpeg-$Target.exe") -version | Out-Null
 Assert-NativeSuccess "FFmpeg self-check"
+Begin-NativeCommand
 & (Join-Path $BinaryDir "ffprobe-$Target.exe") -version | Out-Null
 Assert-NativeSuccess "FFprobe self-check"
 
 Push-Location (Join-Path $Root "frontend")
 try {
+    Begin-NativeCommand
     npm ci --include=dev
     Assert-NativeSuccess "npm install"
+    Begin-NativeCommand
     npm run build
     Assert-NativeSuccess "frontend build"
+    Begin-NativeCommand
     npm exec tauri build -- --no-bundle --target $Target
     Assert-NativeSuccess "Tauri build"
 } finally {
