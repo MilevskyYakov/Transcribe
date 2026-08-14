@@ -26,6 +26,15 @@ function Assert-NativeSuccess([string]$Step) {
     if ($ExitCode -ne 0) { throw "$Step failed with exit code $ExitCode." }
 }
 
+function Get-Sha256([string]$Path) {
+    $Stream = [IO.File]::OpenRead($Path)
+    try {
+        $Sha256 = [Security.Cryptography.SHA256]::Create()
+        try { return -join ($Sha256.ComputeHash($Stream) | ForEach-Object { $_.ToString("x2") }) }
+        finally { $Sha256.Dispose() }
+    } finally { $Stream.Dispose() }
+}
+
 if (-not [Environment]::Is64BitOperatingSystem -or $env:OS -ne "Windows_NT") {
     throw "Run this script natively on Windows 11 x64."
 }
@@ -64,10 +73,10 @@ Begin-NativeCommand
 Assert-NativeSuccess "PyInstaller backend build"
 
 $ArchivePath = Join-Path $BuildDir $FfmpegArchive
-if (-not (Test-Path $ArchivePath) -or (Get-FileHash $ArchivePath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $FfmpegSha256) {
+if (-not (Test-Path $ArchivePath) -or (Get-Sha256 $ArchivePath) -ne $FfmpegSha256) {
     Invoke-WebRequest -Uri $FfmpegUrl -OutFile $ArchivePath
 }
-$ActualHash = (Get-FileHash $ArchivePath -Algorithm SHA256).Hash.ToLowerInvariant()
+$ActualHash = Get-Sha256 $ArchivePath
 if ($ActualHash -ne $FfmpegSha256) {
     throw "FFmpeg archive checksum mismatch: $ActualHash"
 }
@@ -130,7 +139,7 @@ foreach ($Path in @("mnema-backend.exe", "ffmpeg.exe", "ffprobe.exe", "mnema.exe
     $ArtifactPath = Join-Path $ReleaseDir $Path
     $Manifest.artifacts[$Path] = [ordered]@{
         size = (Get-Item $ArtifactPath).Length
-        sha256 = (Get-FileHash $ArtifactPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        sha256 = Get-Sha256 $ArtifactPath
     }
 }
 $ManifestPath = Join-Path $BuildDir "runtime-manifest.json"
