@@ -28,6 +28,19 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-pc-windows-msvc
+      - name: Prepare ephemeral updater signing key
+        working-directory: frontend
+        shell: pwsh
+        run: |
+          $Key = Join-Path $env:RUNNER_TEMP "mnema-ci-updater.key"
+          $Password = [Guid]::NewGuid().ToString()
+          npm exec --yes --package=@tauri-apps/cli@2.11.1 -- tauri signer generate --ci -p $Password -w $Key
+          $ConfigPath = "src-tauri/tauri.conf.json"
+          $Config = Get-Content $ConfigPath -Raw | ConvertFrom-Json
+          $Config.plugins.updater.pubkey = (Get-Content "$Key.pub" -Raw).Trim()
+          $Config | ConvertTo-Json -Depth 100 | Set-Content $ConfigPath -Encoding UTF8
+          "TAURI_SIGNING_PRIVATE_KEY=$Key" >> $env:GITHUB_ENV
+          "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=$Password" >> $env:GITHUB_ENV
       - name: Build and smoke Windows x64 runtime
         working-directory: frontend
         run: npm run package:windows -- -Smoke
