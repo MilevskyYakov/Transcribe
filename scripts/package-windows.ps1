@@ -186,12 +186,12 @@ if ($Smoke) {
         }
         if ($Model.status -ne "ready") { throw "Tiny model download timed out." }
 
-        $JobBody = @{
+        $JobBody = [Text.Encoding]::UTF8.GetBytes((@{
             input_path = $MediaPath
             display_title = "Windows smoke Юникод"
             asr_model_name = "tiny"
             final_markdown_dir = $FinalDir
-        } | ConvertTo-Json
+        } | ConvertTo-Json))
         $JobId = (Invoke-RestMethod "$BaseUrl/jobs" -Method Post -ContentType "application/json" -Body $JobBody).job.job_id
         for ($Attempt = 0; $Attempt -lt 600; $Attempt++) {
             $Job = (Invoke-RestMethod "$BaseUrl/jobs/$JobId").job
