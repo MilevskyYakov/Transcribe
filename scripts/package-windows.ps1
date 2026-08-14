@@ -33,8 +33,6 @@ if (-not (Test-Path $Python)) {
 }
 & $Python -m pip install --upgrade pip wheel
 Assert-NativeSuccess "pip bootstrap"
-& $Python -m pip uninstall -y mnema 2>$null
-if ($LASTEXITCODE -ne 0) { Write-Host "mnema was not installed yet" }
 & $Python -m pip install $Root "pyinstaller==6.16.0"
 Assert-NativeSuccess "runtime dependency install"
 
